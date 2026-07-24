@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SMM Agent
 
-## Getting Started
+Персональный AI-ассистент для создания контент-плана и подготовки публикаций
+в Telegram-канале. Анализирует публикации конкурентов, предлагает идеи для
+постов и помогает генерировать полноценные публикации в авторском стиле.
 
-First, run the development server:
+Финальное решение о выборе идеи и публикации всегда принимает человек — система
+ничего не публикует автоматически.
+
+## Стек
+
+Next.js (App Router), TypeScript, Prisma + Supabase (PostgreSQL), OpenAI,
+grammy (Telegram-бот), node-cron, zod.
+
+## Быстрый старт
 
 ```bash
+# 1. Установить зависимости
+npm install
+
+# 2. Скопировать шаблон переменных окружения и заполнить значения
+cp .env.example .env
+
+# 3. Запустить в режиме разработки
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Проверка работоспособности: http://localhost:3000/api/health
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Скрипты
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Команда                 | Назначение                          |
+| ----------------------- | ----------------------------------- |
+| `npm run dev`           | Запуск в режиме разработки          |
+| `npm run build`         | Production-сборка                   |
+| `npm run start`         | Запуск production-сборки            |
+| `npm run lint`          | Проверка ESLint                     |
+| `npm run type-check`    | Проверка типов (`tsc --noEmit`)     |
+| `npm run prisma:studio` | Prisma Studio (после настройки БД)  |
 
-## Learn More
+## Документация
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [docs/VISION.md](docs/VISION.md) — цели проекта, флоу MVP, принципы генерации.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — структура папок, стек, принципы
+  организации кода.

@@ -12,7 +12,8 @@
     "bot": "tsx src/bot/run.ts",
     "bot:dev": "tsx watch src/bot/run.ts",
     "test:ai": "tsx src/ai/test.ts",
-    "check:models": "tsx src/ai/check-models.ts"
+    "check:models": "tsx src/ai/check-models.ts",
+    "parse:natalia": "tsx src/parser/natalia/run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -20,12 +21,14 @@
     "@prisma/client": "^7.9.0",
     "dotenv": "^17.4.2",
     "grammy": "^1.45.1",
+    "input": "^1.0.1",
     "next": "16.2.11",
     "node-cron": "^4.6.0",
     "openai": "^6.49.0",
     "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "telegram": "^2.26.22",
     "zod": "^4.4.3"
   },
   "devDependencies": {

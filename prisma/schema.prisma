@@ -1,12 +1,142 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Модель данных описана в docs/DataArchitecture.md
+// Векторная часть (pgvector, embeddings) — в docs/Embeddings.md
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/db/generated"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum IdeaStatus {
+  NEW
+  SENT
+  SELECTED
+  REJECTED
+  DUPLICATE
+}
+
+enum RunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────
+// Competitor — Telegram-каналы конкурентов
+// ─────────────────────────────────────────────────────────────
+
+model Competitor {
+  id        String   @id @default(cuid())
+  name      String
+  url       String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  posts CompetitorPost[]
+
+  @@index([isActive])
+}
+
+// ─────────────────────────────────────────────────────────────
+// CompetitorPost — оригинальные посты конкурентов
+// Основной источник для генерации идей.
+// ─────────────────────────────────────────────────────────────
+
+model CompetitorPost {
+  id              String   @id @default(cuid())
+  competitorId    String
+  telegramPostUrl String   @unique
+  text            String
+  publishedAt     DateTime
+  isProcessed     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  idea       Idea?
+
+  @@index([competitorId])
+  @@index([isProcessed])
+  @@index([publishedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NataliaPost — база знаний (стиль, эталоны, раскрытые темы)
+// Не источник идей, а контекст для OpenAI + дедупликация.
+// ─────────────────────────────────────────────────────────────
+
+model NataliaPost {
+  id          String    @id @default(cuid())
+  title       String?
+  text        String
+  mainIdea    String
+  // pgvector: Prisma хранит как Unsupported, работаем через raw SQL
+  embedding   Unsupported("vector(1536)")?
+  isReference Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([isReference])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Idea — идеи, созданные AI из поста конкурента
+// ─────────────────────────────────────────────────────────────
+
+model Idea {
+  id               String   @id @default(cuid())
+  competitorPostId String   @unique
+  title            String
+  thesis           String
+  goal             String
+  // pgvector: вектор от title + thesis, для дедупликации. См. Embeddings.md
+  embedding        Unsupported("vector(1536)")?
+  status           IdeaStatus @default(NEW)
+  createdAt        DateTime @default(now())
+
+  competitorPost CompetitorPost @relation(fields: [competitorPostId], references: [id], onDelete: Cascade)
+  generatedPost  GeneratedPost?
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// GeneratedPost — готовый пост (черновик) на основе выбранной идеи
+// ─────────────────────────────────────────────────────────────
+
+model GeneratedPost {
+  id        String   @id @default(cuid())
+  ideaId    String   @unique
+  text      String
+  createdAt DateTime @default(now())
+
+  idea Idea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// GenerationRun — служебная запись о каждом прогоне генерации
+// ─────────────────────────────────────────────────────────────
+
+model GenerationRun {
+  id             String    @id @default(cuid())
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  processedPosts Int       @default(0)
+  generatedIdeas Int       @default(0)
+  acceptedIdeas  Int       @default(0)
+  rejectedIdeas  Int       @default(0)
+  openaiRequests Int       @default(0)
+  status         RunStatus @default(RUNNING)
+
+  @@index([status])
+  @@index([startedAt])
 }

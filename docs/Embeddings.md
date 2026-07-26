@@ -118,11 +118,9 @@ model Idea {
 
 model NataliaPost {
   id          String   @id @default(cuid())
-  title       String?
   text        String
   mainIdea    String
   embedding   Unsupported("vector(1536)")?
-  isReference Boolean  @default(false)
   publishedAt DateTime?
   createdAt   DateTime @default(now())
 }

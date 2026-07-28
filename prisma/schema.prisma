@@ -93,7 +93,7 @@ model Idea {
   id               String   @id @default(cuid())
   competitorPostId String   @unique
   title            String
-  thesis           String
+  mainIdea           String
   goal             String
   // pgvector: вектор от title + thesis, для дедупликации. См. Embeddings.md
   embedding        Unsupported("vector(1536)")?

@@ -5,36 +5,32 @@ import { promptInput } from './utils';
 export async function authorizeClient(
   client: TelegramClient,
   apiId: number,
-  apiHash: string
+  apiHash: string,
+  hasExistingSession: boolean
 ): Promise<void> {
   try {
-    const isAuthorized = await client.checkAuthorization();
+    let isNewAuthorization = false;
 
-    if (!isAuthorized) {
-      console.log('\n🔐 Authorization required');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    await client.start({
+      phoneNumber: async () => {
+        isNewAuthorization = true;
+        console.log('\n🔐 Authorization required');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        return await promptInput('Enter your phone number (with country code, e.g., +1234567890): ');
+      },
+      password: async () => {
+        return await promptInput('Enter your 2FA password (if enabled): ');
+      },
+      phoneCode: async () => {
+        console.log('📨 Verification code sent to your Telegram app');
+        return await promptInput('Enter the verification code: ');
+      },
+      onError: (err) => {
+        console.error('❌ Error during authorization:', err.message);
+      },
+    });
 
-      const phoneNumber = await promptInput('Enter your phone number (with country code, e.g., +1234567890): ');
-
-      await client.sendCode(
-        {
-          apiId,
-          apiHash,
-        },
-        phoneNumber
-      );
-
-      console.log('📨 Verification code sent to your Telegram app');
-      const code = await promptInput('Enter the verification code: ');
-
-      await client.invoke(
-        new (await import('telegram/tl')).Api.auth.SignIn({
-          phoneNumber,
-          phoneCodeHash: (client as any).phoneCodeHash,
-          phoneCode: code,
-        })
-      );
-
+    if (isNewAuthorization) {
       console.log('✅ Authorization successful!');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
@@ -44,7 +40,7 @@ export async function authorizeClient(
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log(`TELEGRAM_SESSION_STRING="${sessionString}"`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-    } else {
+    } else if (hasExistingSession) {
       console.log('✅ Using existing session (already authorized)');
     }
   } catch (error) {

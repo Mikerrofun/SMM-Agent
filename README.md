@@ -37,9 +37,13 @@ npm run dev
 | `npm run lint`          | Проверка ESLint                     |
 | `npm run type-check`    | Проверка типов (`tsc --noEmit`)     |
 | `npm run prisma:studio` | Prisma Studio (после настройки БД)  |
+| `npm run parse:natalia` | Парсинг канала @talant_director     |
+| `npm run bot`           | Запуск Telegram-бота                |
+| `npm run bot:dev`       | Запуск бота в watch-режиме          |
 
 ## Документация
 
 - [docs/VISION.md](docs/VISION.md) — цели проекта, флоу MVP, принципы генерации.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — структура папок, стек, принципы
   организации кода.
+- [docs/PARSING.md](docs/PARSING.md) — как работает парсинг Telegram-каналов (для других агентов).

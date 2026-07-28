@@ -4,8 +4,3 @@ export const PARSER_CONFIG = {
   BATCH_SIZE: 20,
   MESSAGES_PER_REQUEST: 100,
 } as const;
-
-export const RETRY_CONFIG = {
-  maxAttempts: 3,
-  delayMs: 2000,
-} as const;

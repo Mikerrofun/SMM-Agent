@@ -1,7 +1,8 @@
 import { Api } from 'telegram';
 import { createManyNataliaPosts } from '../../repositories/nataliaPostRepository';
 import { CreateNataliaPostInput, ParseStatistics, ProgressCallback } from '../../types/nataliaPost.types';
-import { validateMessageData, extractMessageText, extractMessageDate } from './validator';
+import { validateMessageData } from '../../shared/telegram/validators';
+import { extractMessageText, extractMessageDate } from '../../shared/telegram/transformers';
 import { PARSER_CONFIG } from './config';
 
 export async function processMessageBatch(
@@ -54,6 +55,8 @@ export async function processMessageBatch(
   return { batch, shouldStop };
 }
 
+
+
 async function saveBatch(
   batch: CreateNataliaPostInput[],
   stats: ParseStatistics,
@@ -78,6 +81,8 @@ async function saveBatch(
     return [];
   }
 }
+
+
 
 export async function saveFinalBatch(
   batch: CreateNataliaPostInput[],

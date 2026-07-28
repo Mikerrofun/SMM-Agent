@@ -89,21 +89,63 @@ src/
 │   └── nataliaPost.types.ts          # Типы: CreateNataliaPostInput, ParseStatistics
 │
 ├── shared/
-│   └── telegram/
-│       └── client.ts                 # Инициализация Telegram клиента (переиспользуется)
+│   └── telegram/                     # Переиспользуемые модули для работы с Telegram
+│       ├── config.ts                 # TELEGRAM_RETRY_CONFIG (retry конфигурация)
+│       ├── connection.ts             # connectWithRetry() — подключение с retry
+│       ├── auth.ts                   # authorizeClient() — авторизация (phone/code/session)
+│       ├── validators.ts             # isTextMessage, isValidDate, validateMessageData
+│       ├── transformers.ts           # extractMessageText, extractMessageDate
+│       ├── utils.ts                  # sleep, promptInput (вспомогательные утилиты)
+│       ├── client.ts                 # initializeTelegramClient() — координация
+│       └── index.ts                  # Экспорт публичных функций
 │
 ├── parser/natalia/
-│   ├── config.ts                     # Константы: CHANNEL_USERNAME, CUTOFF_DATE, BATCH_SIZE
+│   ├── config.ts                     # Константы парсера: CHANNEL_USERNAME, CUTOFF_DATE, BATCH_SIZE
 │   ├── errors.ts                     # Кастомные ошибки: TelegramAuthError, NetworkError
-│   ├── validator.ts                  # Фильтрация сообщений (текст + дата)
 │   ├── checkChannel.ts               # Проверка существования канала
-│   ├── batchProcessor.ts             # Сбор и сохранение батчей
+│   ├── batchProcessor.ts             # Сбор и сохранение батчей (использует validators/transformers)
 │   ├── parser.ts                     # Основная логика (координация модулей)
 │   └── run.ts                        # CLI entry point
 │
 └── repositories/
     └── nataliaPostRepository.ts      # Работа с БД (getLatestPublishedDate, createMany)
 ```
+
+### Модульная структура Telegram клиента
+
+Telegram клиент разделен на переиспользуемые модули:
+
+**config.ts** — конфигурация retry-логики:
+- `maxAttempts: 3` — количество попыток подключения
+- `delayMs: 4000` — задержка между попытками (4 секунды)
+
+**connection.ts** — подключение к Telegram:
+- `connectWithRetry()` — автоматические повторные попытки при сетевых ошибках
+- Логирование каждой попытки и задержки
+
+**auth.ts** — авторизация клиента:
+- Проверка существующей сессии
+- Интерактивный ввод номера телефона и кода
+- Вывод session string для сохранения в `.env`
+
+**validators.ts** — валидация сообщений:
+- `isTextMessage()` — проверка, что сообщение текстовое (не опрос, не пустое)
+- `isValidDate()` — проверка даты публикации
+- `validateMessageData()` — комплексная валидация
+
+**transformers.ts** — преобразование данных:
+- `extractMessageText()` — извлечение текста сообщения
+- `extractMessageDate()` — извлечение даты публикации
+
+**utils.ts** — вспомогательные функции:
+- `sleep()` — асинхронная задержка
+- `promptInput()` — ввод данных из консоли
+
+**client.ts** — координация:
+- `initializeTelegramClient()` — создание клиента, подключение, авторизация
+- `disconnectClient()` — корректное отключение
+
+**index.ts** — публичный API модуля для удобного импорта
 
 ## Запуск
 
@@ -137,7 +179,8 @@ npm run parse:natalia
 
 2. **Переиспользовать shared модули:**
    ```typescript
-   import { initializeTelegramClient } from '../../shared/telegram/client';
+   import { initializeTelegramClient, disconnectClient } from '../../shared/telegram';
+   import { validateMessageData, extractMessageText, extractMessageDate } from '../../shared/telegram/validators';
    ```
 
 3. **Создать типы (если структура отличается):**
@@ -152,7 +195,6 @@ npm run parse:natalia
 
 4. **Скопировать структуру из `parser/natalia`:**
    - `checkChannel.ts` — без изменений
-   - `validator.ts` — адаптировать фильтры (если нужны другие правила)
    - `batchProcessor.ts` — адаптировать под новую модель БД
    - `parser.ts` — координация (минимальные правки)
    - `run.ts` — CLI entry point
@@ -161,6 +203,8 @@ npm run parse:natalia
    ```json
    "parse:competitor": "tsx src/parser/competitor/run.ts"
    ```
+
+**Важно:** Все валидаторы и трансформеры уже есть в `shared/telegram`, не нужно дублировать логику.
 
 ## Что НЕ делает парсер
 

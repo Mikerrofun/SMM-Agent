@@ -25,10 +25,8 @@ async function main(): Promise<void> {
   let client;
 
   try {
-    // Initialize Telegram client
     client = await initializeTelegramClient();
 
-    // Parse channel with progress callback
     console.log('\n📥 Fetching and parsing messages...\n');
     
     let lastProgressUpdate = 0;

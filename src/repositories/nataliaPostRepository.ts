@@ -40,3 +40,39 @@ export async function countPosts(): Promise<number> {
   return prisma.nataliaPost.count();
 }
 
+/**
+ * Возвращает посты без заполненной mainIdea (NULL или пустая строка).
+ * Выбираются только нужные поля (id, text), сортировка — новые сначала.
+ */
+export async function getPostsWithoutMainIdea(): Promise<
+  Array<{ id: string; text: string }>
+> {
+  return prisma.nataliaPost.findMany({
+    where: {
+      mainIdea: "",
+
+    },
+    select: {
+      id: true,
+      text: true,
+    },
+    orderBy: {
+      publishedAt: "desc",
+    },
+  });
+}
+
+/**
+ * Обновляет mainIdea у конкретного поста.
+ */
+export async function updateMainIdea(
+  id: string,
+  mainIdea: string
+): Promise<void> {
+  await prisma.nataliaPost.update({
+    where: { id },
+    data: { mainIdea },
+  });
+}
+
+

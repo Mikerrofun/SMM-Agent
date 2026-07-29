@@ -13,12 +13,16 @@
     "bot:dev": "tsx watch src/bot/run.ts",
     "test:ai": "tsx src/ai/test.ts",
     "check:models": "tsx src/ai/check-models.ts",
-    "parse:natalia": "tsx src/parser/natalia/run.ts"
+    "parse:natalia": "tsx src/parser/natalia/run.ts",
+    "extract:mainidea:natalia": "tsx src/scripts/extractMainIdea/natalia.ts"
+
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.9.0",
+    "@types/cli-progress": "^3.11.6",
+    "cli-progress": "^3.12.0",
     "dotenv": "^17.4.2",
     "grammy": "^1.45.1",
     "input": "^1.0.1",

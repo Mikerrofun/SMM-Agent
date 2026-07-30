@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { initializeTelegramClient, disconnectClient } from '../../shared/telegram/client';
 import { parseNataliaChannel } from './parser';
+import { ProgressBar } from '../../shared/utils/progressBar';
 import {
   TelegramAuthError,
   ChannelNotFoundError,
@@ -29,20 +30,21 @@ async function main(): Promise<void> {
 
     console.log('\n📥 Fetching and parsing messages...\n');
     
-    let lastProgressUpdate = 0;
+    const progressBar = new ProgressBar('⏳ Обработка');
+    let progressStarted = false;
     
     const stats = await parseNataliaChannel(client, (current, total) => {
-      // Update progress every 5 messages to avoid flooding console
-      if (current - lastProgressUpdate >= 5 || current === total) {
-        process.stdout.write(
-          `\r⏳ Обработано: ${current}/${total} сообщений`
-        );
-        lastProgressUpdate = current;
+      if (!progressStarted) {
+        progressBar.start(total, current);
+        progressStarted = true;
+      } else {
+        progressBar.update(current);
       }
     });
 
-    // Clear progress line
-    process.stdout.write('\r' + ' '.repeat(60) + '\r');
+    if (progressStarted) {
+      progressBar.stop();
+    }
 
     // Display results
     console.log('\n');

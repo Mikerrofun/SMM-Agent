@@ -1,4 +1,4 @@
-import cliProgress from "cli-progress";
+import * as cliProgress from "cli-progress";
 
 /**
  * Переиспользуемый progress bar на базе cli-progress.

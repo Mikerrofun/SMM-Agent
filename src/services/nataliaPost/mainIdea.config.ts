@@ -12,6 +12,6 @@ export const MAIN_IDEA_RETRY_CONFIG: RetryConfig = {
 
 
 export const MAIN_IDEA_RATE_LIMIT = {
-  requestsPerMinute: 28,
+  requestsPerMinute: 60, // OpenAI gpt-4o-mini: консервативный лимит для Tier 1
   concurrency: 5,
 } as const;

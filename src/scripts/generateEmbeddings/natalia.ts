@@ -45,7 +45,7 @@ async function main(): Promise<void> {
     for (const post of postsWithoutMainIdea) {
       try {
         const mainIdea = await extractMainIdea(post.text);
-        items1.push({ id: post.id, text: mainIdea, originalMainIdea: mainIdea });
+        items1.push({ id: post.id, text: mainIdea });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`❌ Ошибка извлечения mainIdea для ${post.id}: ${message}`);
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
 
       // Создаём Map для сохранения mainIdea
       const mainIdeasMap = new Map(
-        items1.map((item) => [item.id, item.originalMainIdea])
+        items1.map((item) => [item.id, item.text])
       );
 
       const stats1 = await processEmbeddingsBatch({

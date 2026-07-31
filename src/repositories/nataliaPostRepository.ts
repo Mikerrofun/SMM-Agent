@@ -75,4 +75,56 @@ export async function updateMainIdea(
   });
 }
 
+/**
+ * Обновляет mainIdea и embedding у конкретного поста.
+ * Embedding записывается через raw SQL, т.к. Prisma не поддерживает vector тип нативно.
+ */
+export async function updateMainIdeaAndEmbedding(
+  id: string,
+  mainIdea: string,
+  embedding: number[]
+): Promise<void> {
+  const vectorLiteral = `[${embedding.join(",")}]`;
+
+  await prisma.$executeRaw`
+    UPDATE "NataliaPost"
+    SET "mainIdea" = ${mainIdea},
+        embedding = ${vectorLiteral}::vector
+    WHERE id = ${id}
+  `;
+}
+
+/**
+ * Возвращает посты, у которых есть mainIdea, но нет embedding.
+ */
+export async function getPostsWithoutEmbedding(): Promise<
+  Array<{ id: string; mainIdea: string }>
+> {
+  const result = await prisma.$queryRaw<Array<{ id: string; mainIdea: string }>>`
+    SELECT id, "mainIdea"
+    FROM "NataliaPost"
+    WHERE "mainIdea" != '' AND "mainIdea" IS NOT NULL
+      AND embedding IS NULL
+    ORDER BY "publishedAt" DESC
+  `;
+
+  return result;
+}
+
+/**
+ * Обновляет только embedding у конкретного поста (mainIdea уже есть).
+ */
+export async function updateEmbedding(
+  id: string,
+  embedding: number[]
+): Promise<void> {
+  const vectorLiteral = `[${embedding.join(",")}]`;
+
+  await prisma.$executeRaw`
+    UPDATE "NataliaPost"
+    SET embedding = ${vectorLiteral}::vector
+    WHERE id = ${id}
+  `;
+}
+
 

@@ -14,8 +14,8 @@
     "test:ai": "tsx src/ai/test.ts",
     "check:models": "tsx src/ai/check-models.ts",
     "parse:natalia": "tsx src/parser/natalia/run.ts",
-    "extract:mainidea:natalia": "tsx src/scripts/extractMainIdea/natalia.ts"
-
+    "extract:mainidea:natalia": "tsx src/scripts/extractMainIdea/natalia.ts",
+    "generate:embeddings:natalia": "tsx src/scripts/generateEmbeddings/natalia.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

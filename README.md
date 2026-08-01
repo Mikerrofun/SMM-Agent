@@ -38,6 +38,8 @@ npm run dev
 | `npm run type-check`    | Проверка типов (`tsc --noEmit`)     |
 | `npm run prisma:studio` | Prisma Studio (после настройки БД)  |
 | `npm run parse:natalia` | Парсинг канала @talant_director     |
+| `npm run parse:competitors` | Парсинг каналов конкурентов (25 каналов) |
+| `npm run seed:competitors` | Заполнение БД списком конкурентов |
 | `npm run extract:mainidea:natalia` | Извлечение mainIdea из постов Натальи |
 | `npm run bot`           | Запуск Telegram-бота                |
 | `npm run bot:dev`       | Запуск бота в watch-режиме          |
@@ -49,5 +51,7 @@ npm run dev
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — структура папок, стек, принципы
   организации кода.
 - [docs/PARSING.md](docs/PARSING.md) — как работает парсинг Telegram-каналов (для других агентов).
+- [docs/NATALIA_PARSER.md](docs/NATALIA_PARSER.md) — парсер канала Натальи (@talant_director).
+- [docs/COMPETITORS_PARSER.md](docs/COMPETITORS_PARSER.md) — парсер каналов конкурентов (25 каналов).
 - [docs/MAIN_IDEA_EXTRACTION.md](docs/MAIN_IDEA_EXTRACTION.md) — извлечение главной мысли (mainIdea) через LLM.
 

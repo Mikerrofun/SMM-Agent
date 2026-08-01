@@ -70,7 +70,6 @@ export async function parseCompetitorChannel(
       return stats;
     }
     
-    // Сетевые ошибки пробрасываем выше
     throw error;
   }
 }
@@ -97,9 +96,8 @@ async function parseMessages(
 
     offsetId = messages[messages.length - 1]?.id || offsetId;
 
-    // Обработка каждого сообщения
     for (const message of messages) {
-      // Валидация
+      //validate
       if (!validateMessageData(message, cutoffDate)) {
         stats.skipped++;
         continue;
@@ -128,7 +126,6 @@ async function parseMessages(
         publishedAt,
       });
 
-      // Сохранение батча при достижении лимита
       if (batch.length >= COMPETITORS_PARSER_CONFIG.BATCH_SIZE) {
         await saveBatch(batch, stats, processedCount, onProgress);
         processedCount += batch.length;
@@ -140,13 +137,11 @@ async function parseMessages(
       break;
     }
 
-    // Если получили меньше сообщений, чем запрашивали — достигли конца
     if (messages.length < COMPETITORS_PARSER_CONFIG.MESSAGES_PER_REQUEST) {
       shouldContinue = false;
     }
   }
 
-  // Сохраняем оставшиеся посты
   if (batch.length > 0) {
     await saveBatch(batch, stats, processedCount, onProgress);
   }

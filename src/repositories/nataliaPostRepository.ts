@@ -40,10 +40,7 @@ export async function countPosts(): Promise<number> {
   return prisma.nataliaPost.count();
 }
 
-/**
- * Возвращает посты без заполненной mainIdea (NULL или пустая строка).
- * Выбираются только нужные поля (id, text), сортировка — новые сначала.
- */
+
 export async function getPostsWithoutMainIdea(): Promise<
   Array<{ id: string; text: string }>
 > {
@@ -62,9 +59,7 @@ export async function getPostsWithoutMainIdea(): Promise<
   });
 }
 
-/**
- * Обновляет mainIdea у конкретного поста.
- */
+
 export async function updateMainIdea(
   id: string,
   mainIdea: string
@@ -75,10 +70,7 @@ export async function updateMainIdea(
   });
 }
 
-/**
- * Обновляет mainIdea и embedding у конкретного поста.
- * Embedding записывается через raw SQL, т.к. Prisma не поддерживает vector тип нативно.
- */
+
 export async function updateMainIdeaAndEmbedding(
   id: string,
   mainIdea: string,
@@ -94,9 +86,7 @@ export async function updateMainIdeaAndEmbedding(
   `;
 }
 
-/**
- * Возвращает посты, у которых есть mainIdea, но нет embedding.
- */
+
 export async function getPostsWithoutEmbedding(): Promise<
   Array<{ id: string; mainIdea: string }>
 > {
@@ -111,9 +101,6 @@ export async function getPostsWithoutEmbedding(): Promise<
   return result;
 }
 
-/**
- * Обновляет только embedding у конкретного поста (mainIdea уже есть).
- */
 export async function updateEmbedding(
   id: string,
   embedding: number[]

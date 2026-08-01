@@ -17,6 +17,9 @@ import { deactivateCompetitor } from '../../repositories/competitorRepository';
 import { ChannelNotFoundError, isNetworkError } from './errors';
 import { COMPETITORS_PARSER_CONFIG } from './config';
 
+/**
+ * Парсит один канал конкурента
+ */
 export async function parseCompetitorChannel(
   client: TelegramClient,
   competitor: Competitor,
@@ -34,7 +37,6 @@ export async function parseCompetitorChannel(
   };
 
   try {
-    //check channel
     const channel = await getChannel(client, stats.channelUsername);
     
     console.log(`\n📡 Parsing ${stats.channelName} (@${stats.channelUsername})`);
@@ -51,6 +53,7 @@ export async function parseCompetitorChannel(
     return stats;
     
   } catch (error) {
+    // Если канал недоступен (не сетевая ошибка) - деактивируем
     if (error instanceof ChannelNotFoundError && !isNetworkError(error)) {
       console.log(
         `\n⚠️  Channel @${stats.channelUsername} is not accessible. Deactivating...`
@@ -70,6 +73,7 @@ export async function parseCompetitorChannel(
       return stats;
     }
     
+    // Сетевые и другие ошибки пробрасываем выше
     throw error;
   }
 }
@@ -94,10 +98,10 @@ async function parseMessages(
       break;
     }
 
+    // offsetId для пагинации - ID последнего сообщения
     offsetId = messages[messages.length - 1]?.id || offsetId;
 
     for (const message of messages) {
-      //validate
       if (!validateMessageData(message, cutoffDate)) {
         stats.skipped++;
         continue;
@@ -105,7 +109,7 @@ async function parseMessages(
 
       const messageDate = extractMessageDate(message);
       
-      // Проверка на cutoff date (инкрементальная загрузка)
+      // Инкрементальная загрузка: если дошли до старых - останавливаемся
       if (messageDate && messageDate < cutoffDate) {
         console.log(
           `  ⏹️  Reached cutoff date (${messageDate.toISOString()})`
@@ -114,7 +118,6 @@ async function parseMessages(
         break;
       }
 
-      // Сбор данных
       const text = extractMessageText(message);
       const telegramPostUrl = `https://t.me/${stats.channelUsername}/${message.id}`;
       const publishedAt = messageDate || new Date();
@@ -126,6 +129,7 @@ async function parseMessages(
         publishedAt,
       });
 
+      // Батчинг: сохраняем по 20 постов
       if (batch.length >= COMPETITORS_PARSER_CONFIG.BATCH_SIZE) {
         await saveBatch(batch, stats, processedCount, onProgress);
         processedCount += batch.length;
@@ -178,9 +182,11 @@ async function saveBatch(
   onProgress?: CompetitorProgressCallback
 ): Promise<void> {
   try {
+    // createMany с skipDuplicates: true
+    // Вернет кол-во реально созданных записей (дубли пропускаются)
     const savedCount = await createManyCompetitorPosts(batch);
     stats.saved += savedCount;
-    stats.skipped += batch.length - savedCount;
+    stats.skipped += batch.length - savedCount; // Дубли
     
     if (onProgress) {
       onProgress(stats.channelName, processedCount + batch.length, stats.total);

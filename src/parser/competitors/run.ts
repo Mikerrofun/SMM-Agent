@@ -180,7 +180,6 @@ async function main(): Promise<void> {
     process.exit(1);
     
   } finally {
-    // Cleanup: disconnect client
     if (client) {
       await disconnectClient(client);
     }

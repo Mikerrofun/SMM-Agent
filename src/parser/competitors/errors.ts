@@ -1,8 +1,8 @@
-// Переиспользуем базовые ошибки из natalia/errors.ts
+// Реэкспорт ошибок из shared модуля
 export { 
   ParserError, 
   TelegramAuthError, 
   ChannelNotFoundError, 
   NetworkError, 
   isNetworkError 
-} from '../natalia/errors';
+} from '../../shared/telegram/errors';

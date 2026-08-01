@@ -5,7 +5,7 @@ import {
   CompetitorProgressCallback 
 } from '../../types/competitorPost.types';
 import { getActiveCompetitors } from '../../repositories/competitorRepository';
-import { getLastSuccessfulRun } from '../../repositories/generationRunRepository';
+import { determineCutoffDate } from '../../repositories/generationRunRepository';
 import { parseCompetitorChannel } from './channelProcessor';
 import { COMPETITORS_PARSER_CONFIG } from './config';
 import { isNetworkError } from './errors';
@@ -16,7 +16,6 @@ export async function parseCompetitorsChannels(
 ): Promise<CompetitorParseStatistics> {
   console.log('\n🚀 Starting competitor channels parsing');
   
-  // Получить список активных конкурентов
   const competitors = await getActiveCompetitors();
   
   if (competitors.length === 0) {
@@ -26,12 +25,13 @@ export async function parseCompetitorsChannels(
   
   console.log(`📋 Found ${competitors.length} active competitor(s)`);
   
-  // Определить cutoff date
-  const cutoffDate = await determineCutoffDate();
+  // Определить cutoff date (из repository)
+  const cutoffDate = await determineCutoffDate(
+    COMPETITORS_PARSER_CONFIG.DEFAULT_LOOKBACK_DAYS
+  );
   
   console.log(`📅 Cutoff date: ${cutoffDate.toISOString()}`);
   
-  // Инициализация статистики
   const stats: CompetitorParseStatistics = {
     totalChannels: competitors.length,
     successfulChannels: 0,
@@ -43,7 +43,6 @@ export async function parseCompetitorsChannels(
     channels: [],
   };
   
-  // Итерация по каждому конкуренту
   for (const competitor of competitors) {
     try {
       const channelStats = await parseCompetitorChannel(
@@ -53,7 +52,7 @@ export async function parseCompetitorsChannels(
         onProgress
       );
       
-      // Обновление общей статистики
+
       stats.channels.push(channelStats);
       stats.totalPosts += channelStats.total;
       stats.savedPosts += channelStats.saved;
@@ -67,8 +66,7 @@ export async function parseCompetitorsChannels(
       } else {
         stats.successfulChannels++;
       }
-      
-      // Логирование результата по каналу
+    
       if (channelStats.isAccessible) {
         console.log(
           `  ✅ ${channelStats.channelName}: ${channelStats.saved} saved, ${channelStats.skipped} skipped`
@@ -82,12 +80,10 @@ export async function parseCompetitorsChannels(
     } catch (error) {
       const err = error as Error;
       
-      // Логирование ошибки
       console.error(
         `\n❌ Error parsing ${competitor.name} (@${extractUsername(competitor.url)}): ${err.message}`
       );
       
-      // Добавляем канал в статистику с ошибкой
       stats.channels.push({
         channelName: competitor.name,
         channelUsername: extractUsername(competitor.url),
@@ -100,13 +96,11 @@ export async function parseCompetitorsChannels(
       
       stats.failedChannels++;
       
-      // Если это сетевая ошибка, можно продолжить
       if (isNetworkError(error)) {
         console.log('  ⚠️  Network error, continuing with next channel...');
         continue;
       }
       
-      // Для других ошибок продолжаем
       console.log('  ⚠️  Error occurred, continuing with next channel...');
     }
   }
@@ -114,28 +108,6 @@ export async function parseCompetitorsChannels(
   console.log('\n✅ Parsing completed');
   
   return stats;
-}
-
-async function determineCutoffDate(): Promise<Date> {
-  const lastRun = await getLastSuccessfulRun();
-  
-  if (lastRun?.finishedAt) {
-    console.log(
-      `🔄 Incremental mode: fetching posts newer than last successful run (${lastRun.finishedAt.toISOString()})`
-    );
-    return lastRun.finishedAt;
-  }
-  
-  const lookbackDays = COMPETITORS_PARSER_CONFIG.DEFAULT_LOOKBACK_DAYS;
-  const cutoffDate = new Date(
-    Date.now() - lookbackDays * 24 * 60 * 60 * 1000
-  );
-  
-  console.log(
-    `🆕 First run: fetching posts from the last ${lookbackDays} day(s)`
-  );
-  
-  return cutoffDate;
 }
 
 function extractUsername(url: string): string {

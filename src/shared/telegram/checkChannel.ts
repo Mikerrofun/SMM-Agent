@@ -1,6 +1,34 @@
 import { TelegramClient } from 'telegram';
 import { Api } from 'telegram';
-import { ChannelNotFoundError, ParserError } from './errors';
+
+export class ChannelNotFoundError extends Error {
+  constructor(
+    public channelUsername: string,
+    message?: string,
+    cause?: Error
+  ) {
+    super(
+      message || `Channel "${channelUsername}" not found or not accessible`
+    );
+    this.name = 'ChannelNotFoundError';
+    this.cause = cause;
+    
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
+  }
+}
+
+export class ParserError extends Error {
+  constructor(message: string, public cause?: Error) {
+    super(message);
+    this.name = 'ParserError';
+    
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
+  }
+}
 
 export async function getChannel(
   client: TelegramClient,

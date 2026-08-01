@@ -14,6 +14,7 @@
     "test:ai": "tsx src/ai/test.ts",
     "check:models": "tsx src/ai/check-models.ts",
     "parse:natalia": "tsx src/parser/natalia/run.ts",
+    "parse:competitors": "tsx src/parser/competitors/run.ts",
     "extract:mainidea:natalia": "tsx src/scripts/extractMainIdea/natalia.ts",
     "generate:embeddings:natalia": "tsx src/scripts/generateEmbeddings/natalia.ts",
     "seed:competitors": "tsx src/scripts/seedCompetitors.ts"

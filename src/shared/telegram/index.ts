@@ -16,5 +16,8 @@ export { isTextMessage, isValidDate, validateMessageData } from './validators';
 // Message transformers
 export { extractMessageText, extractMessageDate } from './transformers';
 
+// Channel utilities
+export { getChannel, ChannelNotFoundError, ParserError } from './checkChannel';
+
 // Utilities
 export { sleep, promptInput } from './utils';

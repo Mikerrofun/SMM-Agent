@@ -4,7 +4,7 @@ import { getLatestPublishedDate } from '../../repositories/nataliaPostRepository
 import { ParseStatistics, ProgressCallback, CreateNataliaPostInput } from '../../types/nataliaPost.types';
 import { ParserError } from './errors';
 import { PARSER_CONFIG } from './config';
-import { getChannel } from './checkChannel';
+import { getChannel } from '../../shared/telegram';
 import { processMessageBatch, saveFinalBatch } from './batchProcessor';
 
 export async function parseNataliaChannel(

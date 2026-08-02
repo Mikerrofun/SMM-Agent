@@ -66,23 +66,9 @@ export async function parseCompetitorsChannels(
       } else {
         stats.successfulChannels++;
       }
-    
-      if (channelStats.isAccessible) {
-        console.log(
-          `  ✅ ${channelStats.channelName}: ${channelStats.saved} saved, ${channelStats.skipped} skipped`
-        );
-      } else {
-        console.log(
-          `  ⚠️  ${channelStats.channelName}: not accessible (deactivated)`
-        );
-      }
       
     } catch (error) {
       const err = error as Error;
-      
-      console.error(
-        `\n❌ Error parsing ${competitor.name} (@${extractUsername(competitor.url)}): ${err.message}`
-      );
       
       stats.channels.push({
         channelName: competitor.name,
@@ -95,13 +81,6 @@ export async function parseCompetitorsChannels(
       });
       
       stats.failedChannels++;
-      
-      if (isNetworkError(error)) {
-        console.log('  ⚠️  Network error, continuing with next channel...');
-        continue;
-      }
-      
-      console.log('  ⚠️  Error occurred, continuing with next channel...');
     }
   }
   

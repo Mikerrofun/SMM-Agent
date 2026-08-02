@@ -1,12 +1,19 @@
 import 'dotenv/config';
 import { initializeTelegramClient, disconnectClient } from '../../shared/telegram/client';
 import { parseCompetitorsChannels } from './parser';
+import { ProgressBar } from '../../shared/utils/progressBar';
+import { getActiveCompetitors } from '../../repositories/competitorRepository';
 import {
   TelegramAuthError,
   ChannelNotFoundError,
   NetworkError,
   ParserError,
 } from './errors';
+
+async function getCompetitorCount(): Promise<number> {
+  const competitors = await getActiveCompetitors();
+  return competitors.length;
+}
 
 /**
  * Main entry point for competitors channels parser
@@ -29,10 +36,21 @@ async function main(): Promise<void> {
 
     console.log('\n📥 Fetching and parsing competitor channels...\n');
     
+    const progressBar = new ProgressBar('Парсинг каналов');
+    let channelIndex = 0;
+    const totalChannels = await getCompetitorCount();
+    let progressStarted = false;
+    
     const stats = await parseCompetitorsChannels(client, (channelName, current, total) => {
-      // Optional: можно добавить progress bar для каждого канала
-      // Пока используем простое логирование в channelProcessor
+      if (!progressStarted) {
+        channelIndex++;
+        progressBar.start(totalChannels, channelIndex);
+        progressStarted = true;
+        console.log(`\n📡 [${channelIndex}/${totalChannels}] ${channelName}`);
+      }
     });
+    
+    progressBar.stop();
 
     // Display overall results
     console.log('\n');

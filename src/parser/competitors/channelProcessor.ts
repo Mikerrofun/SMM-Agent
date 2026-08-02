@@ -39,8 +39,6 @@ export async function parseCompetitorChannel(
   try {
     const channel = await getChannel(client, stats.channelUsername);
     
-    console.log(`\n📡 Parsing ${stats.channelName} (@${stats.channelUsername})`);
-    
     await parseMessages(
       client, 
       channel, 
@@ -55,21 +53,8 @@ export async function parseCompetitorChannel(
   } catch (error) {
     // Если канал недоступен (не сетевая ошибка) - деактивируем
     if (error instanceof ChannelNotFoundError && !isNetworkError(error)) {
-      console.log(
-        `\n⚠️  Channel @${stats.channelUsername} is not accessible. Deactivating...`
-      );
-      
-      try {
-        await deactivateCompetitor(competitor.id);
-        stats.isAccessible = false;
-        console.log(`✅ Channel @${stats.channelUsername} deactivated`);
-      } catch (deactivateError) {
-        const err = deactivateError as Error;
-        console.error(
-          `❌ Failed to deactivate channel @${stats.channelUsername}: ${err.message}`
-        );
-      }
-      
+      await deactivateCompetitor(competitor.id);
+      stats.isAccessible = false;
       return stats;
     }
     
@@ -111,9 +96,6 @@ async function parseMessages(
       
       // Инкрементальная загрузка: если дошли до старых - останавливаемся
       if (messageDate && messageDate < cutoffDate) {
-        console.log(
-          `  ⏹️  Reached cutoff date (${messageDate.toISOString()})`
-        );
         shouldContinue = false;
         break;
       }
@@ -168,8 +150,6 @@ async function fetchMessages(
     
     return messages;
   } catch (error) {
-    const err = error as Error;
-    console.error(`\n❌ Error fetching messages: ${err.message}`);
     stats.errors++;
     return null;
   }

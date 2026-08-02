@@ -16,5 +16,17 @@ export { isTextMessage, isValidDate, validateMessageData } from './validators';
 // Message transformers
 export { extractMessageText, extractMessageDate } from './transformers';
 
+// Channel utilities
+export { getChannel } from './checkChannel';
+
+// Errors
+export {
+  ParserError,
+  TelegramAuthError,
+  ChannelNotFoundError,
+  NetworkError,
+  isNetworkError,
+} from './errors';
+
 // Utilities
 export { sleep, promptInput } from './utils';

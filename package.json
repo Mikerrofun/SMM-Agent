@@ -17,6 +17,7 @@
     "parse:competitors": "tsx src/parser/competitors/run.ts",
     "extract:mainidea:natalia": "tsx src/scripts/extractMainIdea/natalia.ts",
     "generate:embeddings:natalia": "tsx src/scripts/generateEmbeddings/natalia.ts",
+    "generate:ideas:competitors": "tsx src/scripts/generateIdeas/competitorPostsToIdeas.ts",
     "seed:competitors": "tsx src/scripts/seedCompetitors.ts"
   },
   "dependencies": {

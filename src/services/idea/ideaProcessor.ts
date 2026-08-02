@@ -1,8 +1,15 @@
 import { extractIdea } from '../../ai/ideaExtractor';
+import { createEmbedding } from '../../ai/embeddings';
 import { createIdeaAndMarkProcessed } from '../../repositories/ideaRepository';
 import { withRetry } from '../../shared/utils/retry';
 import { sleep } from '../../shared/utils/sleep';
 import { IDEA_RETRY_CONFIG, IDEA_RATE_LIMIT } from './idea.config';
+import {
+  IdeaExtractionError,
+  EmbeddingGenerationError,
+  IdeaSaveError,
+  formatIdeaProcessError,
+} from './errors';
 import type {
   IdeaProcessOptions,
   IdeaProcessStats,
@@ -40,22 +47,64 @@ export async function processIdeaBatch(
   let lastStart = 0;
 
   async function processItem(item: IdeaProcessItem): Promise<void> {
+    let stage: 'extractIdea' | 'embedding' | 'save' = 'extractIdea';
+    
     try {
+      // ЭТАП 1: Генерация идеи через LLM
+      stage = 'extractIdea';
       const idea = await withRetry(
-        () => extractIdea(item.text),
+        async () => {
+          try {
+            return await extractIdea(item.text);
+          } catch (err) {
+            throw new IdeaExtractionError(
+              `Failed to extract idea from post ${item.id}`,
+              err instanceof Error ? err : undefined
+            );
+          }
+        },
         IDEA_RETRY_CONFIG
       );
 
-      await createIdeaAndMarkProcessed({
-        competitorPostId: item.id,
-        ...idea,
-      });
+      // ЭТАП 2: Генерация embedding от mainIdea
+      stage = 'embedding';
+      const embedding = await withRetry(
+        async () => {
+          try {
+            return await createEmbedding(idea.mainIdea);
+          } catch (err) {
+            throw new EmbeddingGenerationError(
+              `Failed to create embedding for idea from post ${item.id}`,
+              err instanceof Error ? err : undefined
+            );
+          }
+        },
+        IDEA_RETRY_CONFIG
+      );
+
+      // ЭТАП 3: Сохранение в БД
+      stage = 'save';
+      try {
+        await createIdeaAndMarkProcessed({
+          competitorPostId: item.id,
+          ...idea,
+          embedding,
+        });
+      } catch (err) {
+        throw new IdeaSaveError(
+          `Failed to save idea for post ${item.id}`,
+          err instanceof Error ? err : undefined
+        );
+      }
 
       stats.succeeded++;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       stats.failed++;
-      stats.failedItems.push({ id: item.id, error: message });
+      stats.failedItems.push({
+        id: item.id,
+        stage,
+        error: formatIdeaProcessError(error, stage, item.id),
+      });
     } finally {
       processed++;
       onProgress?.(processed, items.length);

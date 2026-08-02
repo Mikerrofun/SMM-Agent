@@ -21,34 +21,51 @@ export async function getUnprocessedCompetitorPosts(): Promise<IdeaProcessItem[]
 }
 
 /**
- * Создаёт идею в БД и помечает связанный пост конкурента как обработанный.
+ * Создаёт идею в БД и помечает связанный пост конкурента как обработанным.
  * Выполняется атомарно в транзакции.
  *
- * @param data — данные для создания идеи
+ * Embedding обязателен. Используется raw SQL для INSERT с pgvector типом.
+ * Prisma не поддерживает vector тип нативно, поэтому используем $queryRaw.
+ *
+ * @param data — данные для создания идеи (включая обязательный embedding)
  * @returns созданная идея
  * @throws при ошибке БД
  */
-
 export async function createIdeaAndMarkProcessed(
   data: CreateIdeaInput
 ): Promise<IdeaModel> {
   return prisma.$transaction(async (tx) => {
-    const idea = await tx.idea.create({
-      data: {
-        competitorPostId: data.competitorPostId,
-        title: data.title,
-        mainIdea: data.mainIdea,
-        goal: data.goal,
-        status: 'NEW',
-      },
-    });
+    const vectorLiteral = `[${data.embedding.join(',')}]`;
+    
+    const result = await tx.$queryRaw<Array<{ id: string }>>`
+      INSERT INTO "Idea" (
+        id, "competitorPostId", title, "mainIdea", goal,
+        embedding, status, "createdAt"
+      )
+      VALUES (
+        gen_random_uuid(), ${data.competitorPostId},
+        ${data.title}, ${data.mainIdea}, ${data.goal},
+        ${vectorLiteral}::vector, 'NEW', NOW()
+      )
+      RETURNING id
+    `;
+    
+    const ideaId = result[0].id;
     
     await tx.competitorPost.update({
       where: { id: data.competitorPostId },
       data: { isProcessed: true },
     });
     
-    return idea;
+    const createdIdea = await tx.idea.findUnique({
+      where: { id: ideaId },
+    });
+    
+    if (!createdIdea) {
+      throw new Error('Failed to retrieve created idea');
+    }
+    
+    return createdIdea;
   });
 }
 

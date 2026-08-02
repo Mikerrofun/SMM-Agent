@@ -8,6 +8,7 @@ export interface CreateIdeaInput {
   title: string;
   mainIdea: string;
   goal: string;
+  embedding: number[]; 
 }
 
 export interface IdeaProcessItem {

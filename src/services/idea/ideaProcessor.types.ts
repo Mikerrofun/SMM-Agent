@@ -7,6 +7,7 @@ export interface IdeaProcessOptions {
 
 export interface FailedItem {
   id: string;
+  stage: 'extractIdea' | 'embedding' | 'save'; // Stage where the error occurred
   error: string;
 }
 

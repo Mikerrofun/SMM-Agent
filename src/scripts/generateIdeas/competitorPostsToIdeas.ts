@@ -49,8 +49,19 @@ async function main(): Promise<void> {
   if (stats.failed > 0) {
     console.log('\n⚠️  Не удалось обработать:');
     for (const item of stats.failedItems) {
-      console.log(`   • ${item.id}: ${item.error}`);
+      console.log(`   • ${item.id} [${item.stage}]: ${item.error}`);
     }
+    
+    const byStage = stats.failedItems.reduce((acc, item) => {
+      acc[item.stage] = (acc[item.stage] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    console.log('\n📊 Ошибки по этапам:');
+    for (const [stage, count] of Object.entries(byStage)) {
+      console.log(`   ${stage}: ${count}`);
+    }
+    
     console.log('\n💡 Запустите команду повторно для оставшихся постов.');
   } else {
     console.log('\n✨ Все посты успешно обработаны!');

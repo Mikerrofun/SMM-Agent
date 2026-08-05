@@ -183,7 +183,7 @@ export async function findSimilarIdeas(
       AND status = ANY(ARRAY['NEW', 'SENT']::"IdeaStatus"[])
       AND id != ${excludeId}
       AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
-    ORDER BY "createdAt" ASC
+    ORDER BY similarity DESC, "createdAt" ASC
   `;
 
   return result.map((row) => ({
@@ -191,6 +191,17 @@ export async function findSimilarIdeas(
     similarity: Number(row.similarity),
     createdAt: row.createdAt,
   }));
+}
+
+export async function updateMaxSimilarity(
+  ideaId: string,
+  similarity: number
+): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "Idea"
+    SET similarity = ${similarity}
+    WHERE id = ${ideaId}
+  `;
 }
 
 

@@ -1,11 +1,8 @@
-/**
- * Сервис дедупликации идей через векторный поиск.
- */
-
 import {
   getNewIdeasWithEmbeddings,
   findSimilarIdeas,
   markAsDuplicate,
+  updateMaxSimilarity,
 } from '../../repositories/ideaRepository';
 import { findSimilarNataliaPosts } from '../../repositories/nataliaPostRepository';
 import { withRetry } from '../../shared/utils/retry';
@@ -41,48 +38,63 @@ export async function deduplicateIdeas(
       const embeddingArray = parseEmbeddingString(idea.embedding);
 
       await withRetry(async () => {
-        const similarIdeas = await findSimilarIdeas(
+        const allSimilarIdeas = await findSimilarIdeas(
           embeddingArray,
-          SIMILARITY_THRESHOLD,
+          0,
           idea.id
         );
 
-        if (similarIdeas.length > 0) {
-          const match = similarIdeas[0];
-          
-          await markAsDuplicate(
-            idea.id,
-            'idea',
-            match.id,
-            match.similarity
-          );
-
-          stats.duplicates++;
-          stats.duplicatesWithIdeas++;
-          return;
-        }
-
-        const similarPosts = await findSimilarNataliaPosts(
+        const allSimilarPosts = await findSimilarNataliaPosts(
           embeddingArray,
-          SIMILARITY_THRESHOLD
+          0
         );
 
-        if (similarPosts.length > 0) {
-          const match = similarPosts[0];
-          
+        const bestIdeaMatch = allSimilarIdeas[0];
+        const bestPostMatch = allSimilarPosts[0];
+
+        let maxSimilarity = 0;
+        let isDuplicate = false;
+        let duplicateSource: 'idea' | 'nataliaPost' | null = null;
+        let duplicateId: string | null = null;
+
+        if (bestIdeaMatch && bestIdeaMatch.similarity > maxSimilarity) {
+          maxSimilarity = bestIdeaMatch.similarity;
+          if (maxSimilarity >= SIMILARITY_THRESHOLD) {
+            isDuplicate = true;
+            duplicateSource = 'idea';
+            duplicateId = bestIdeaMatch.id;
+          }
+        }
+
+        if (bestPostMatch && bestPostMatch.similarity > maxSimilarity) {
+          maxSimilarity = bestPostMatch.similarity;
+          if (maxSimilarity >= SIMILARITY_THRESHOLD) {
+            isDuplicate = true;
+            duplicateSource = 'nataliaPost';
+            duplicateId = bestPostMatch.id;
+          }
+        }
+
+        if (isDuplicate && duplicateSource && duplicateId) {
           await markAsDuplicate(
             idea.id,
-            'nataliaPost',
-            match.id,
-            match.similarity
+            duplicateSource,
+            duplicateId,
+            maxSimilarity
           );
 
           stats.duplicates++;
-          stats.duplicatesWithNataliaPosts++;
-          return;
+          if (duplicateSource === 'idea') {
+            stats.duplicatesWithIdeas++;
+          } else {
+            stats.duplicatesWithNataliaPosts++;
+          }
+        } else {
+          if (maxSimilarity > 0) {
+            await updateMaxSimilarity(idea.id, maxSimilarity);
+          }
+          stats.unique++;
         }
-
-        stats.unique++;
       }, DEDUPLICATION_RETRY_CONFIG);
 
     } catch (error) {

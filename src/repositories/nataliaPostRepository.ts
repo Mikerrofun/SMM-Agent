@@ -144,7 +144,6 @@ export async function findSimilarNataliaPosts(
     WHERE embedding IS NOT NULL
       AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
     ORDER BY similarity DESC
-    LIMIT 1
   `;
 
   return result.map((row) => ({

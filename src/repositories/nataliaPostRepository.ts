@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { CreateNataliaPostInput } from '../shared/types/nataliaPost.types';
+import type { SimilarityMatch } from '../services/idea/deduplication.types';
 
 export async function getLatestPublishedDate(): Promise<Date | null> {
   const latestPost = await prisma.nataliaPost.findFirst({
@@ -112,6 +113,44 @@ export async function updateEmbedding(
     SET embedding = ${vectorLiteral}::vector
     WHERE id = ${id}
   `;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Методы для дедупликации через векторный поиск
+// ─────────────────────────────────────────────────────────────
+
+
+/**
+ * Находит похожие посты Натальи через cosine similarity (pgvector).
+ * @param embedding — вектор для сравнения (массив чисел)
+ * @param threshold — минимальное значение similarity (от 0 до 1)
+ * @returns массив совпадений, отсортированных по similarity DESC (лучшее первое)
+ * @throws при ошибке БД
+ */
+export async function findSimilarNataliaPosts(
+  embedding: number[],
+  threshold: number
+): Promise<SimilarityMatch[]> {
+  const vectorLiteral = `[${embedding.join(',')}]`;
+
+  const result = await prisma.$queryRaw<
+    Array<{ id: string; similarity: number; mainIdea: string }>
+  >`
+    SELECT 
+      id,
+      (1 - (embedding <=> ${vectorLiteral}::vector)) AS similarity,
+      "mainIdea"
+    FROM "NataliaPost"
+    WHERE embedding IS NOT NULL
+      AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
+    ORDER BY similarity DESC
+    LIMIT 1
+  `;
+
+  return result.map((row) => ({
+    id: row.id,
+    similarity: Number(row.similarity),
+  }));
 }
 
 

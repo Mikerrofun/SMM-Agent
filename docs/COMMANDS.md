@@ -43,6 +43,23 @@ npm run generate:ideas:competitors
 - Создаёт embedding от mainIdea
 - Сохраняет в БД атомарно
 
+### Дедупликация идей
+```bash
+npm run deduplicate:ideas
+```
+Проверяет NEW идеи на похожесть через pgvector (cosine similarity ≥ 0.85):
+- Сравнивает с существующими идеями (NEW + SENT статусы)
+- Сравнивает с постами Натальи
+- Помечает дубликаты статусом DUPLICATE с метаданными
+
+**Типичный workflow:**
+```bash
+npm run parse:competitors              # 1. Парсинг постов конкурентов
+npm run generate:ideas:competitors     # 2. Генерация идей с embeddings
+npm run deduplicate:ideas              # 3. Дедупликация идей
+# 4. Бот отправляет NEW идеи пользователю
+```
+
 ---
 
 ## Бот

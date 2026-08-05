@@ -18,6 +18,7 @@
     "extract:mainidea:natalia": "tsx src/scripts/extractMainIdea/natalia.ts",
     "generate:embeddings:natalia": "tsx src/scripts/generateEmbeddings/natalia.ts",
     "generate:ideas:competitors": "tsx src/scripts/generateIdeas/competitorPostsToIdeas.ts",
+    "deduplicate:ideas": "tsx src/scripts/deduplicateIdeas/run.ts",
     "seed:competitors": "tsx src/scripts/seedCompetitors.ts"
   },
   "dependencies": {

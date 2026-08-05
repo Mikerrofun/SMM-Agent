@@ -3,7 +3,7 @@ import {
   CompetitorParseStatistics, 
   ChannelParseStatistics,
   CompetitorProgressCallback 
-} from '../../types/competitorPost.types';
+} from '../../shared/types/competitorPost.types';
 import { getActiveCompetitors } from '../../repositories/competitorRepository';
 import { determineCutoffDate } from '../../repositories/generationRunRepository';
 import { parseCompetitorChannel } from './channelProcessor';

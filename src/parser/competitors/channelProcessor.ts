@@ -5,7 +5,7 @@ import {
   ChannelParseStatistics, 
   CreateCompetitorPostInput,
   CompetitorProgressCallback 
-} from '../../types/competitorPost.types';
+} from '../../shared/types/competitorPost.types';
 import { 
   validateMessageData,
   extractMessageText,

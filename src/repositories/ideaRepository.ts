@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import type { CreateIdeaInput, IdeaProcessItem } from '../types/idea.types';
+import type { CreateIdeaInput, IdeaProcessItem, IdeaStatus } from '../shared/types/idea.types';
 import type { IdeaModel } from '../db/generated/models/Idea';
 
 
@@ -109,7 +109,7 @@ export async function getNewIdeasForSending(limit: number = 10): Promise<IdeaMod
  * @returns массив идей с указанным статусом
  */
 export async function getIdeasByStatus(
-  status: 'NEW' | 'SENT' | 'SELECTED' | 'REJECTED' | 'DUPLICATE',
+  status: IdeaStatus,
   limit?: number
 ): Promise<IdeaModel[]> {
   return prisma.idea.findMany({
@@ -130,7 +130,7 @@ export async function getIdeasByStatus(
  * @returns количество идей с указанным статусом
  */
 export async function countIdeasByStatus(
-  status: 'NEW' | 'SENT' | 'SELECTED' | 'REJECTED' | 'DUPLICATE'
+  status: IdeaStatus
 ): Promise<number> {
   return prisma.idea.count({
     where: {

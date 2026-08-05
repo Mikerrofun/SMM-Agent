@@ -6,6 +6,8 @@
  * chain of causality through the `cause` field, enabling detailed error logging.
  */
 
+import type { IdeaProcessStage } from '../../shared/types/idea.types';
+
 export class IdeaProcessError extends Error {
   constructor(message: string, public cause?: Error) {
     super(message);
@@ -49,7 +51,7 @@ export class IdeaSaveError extends IdeaProcessError {
 
 export function formatIdeaProcessError(
   error: unknown,
-  stage: 'extractIdea' | 'embedding' | 'save',
+  stage: IdeaProcessStage,
   postId: string
 ): string {
   let message: string;

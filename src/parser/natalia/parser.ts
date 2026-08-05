@@ -1,7 +1,7 @@
 import { TelegramClient } from 'telegram';
 import { Api } from 'telegram';
 import { getLatestPublishedDate } from '../../repositories/nataliaPostRepository';
-import { ParseStatistics, ProgressCallback, CreateNataliaPostInput } from '../../types/nataliaPost.types';
+import { ParseStatistics, ProgressCallback, CreateNataliaPostInput } from '../../shared/types/nataliaPost.types';
 import { ParserError } from './errors';
 import { PARSER_CONFIG } from './config';
 import { getChannel } from '../../shared/telegram';

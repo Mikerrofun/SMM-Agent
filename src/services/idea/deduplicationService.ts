@@ -1,11 +1,5 @@
 /**
  * Сервис дедупликации идей через векторный поиск.
- * 
- * Проверяет NEW идеи на похожесть с:
- * 1. Существующими идеями (NEW + SENT статусы)
- * 2. Постами Натальи (NataliaPost)
- * 
- * При similarity ≥ 0.85 идея помечается как DUPLICATE с метаданными.
  */
 
 import {
@@ -14,7 +8,8 @@ import {
   markAsDuplicate,
 } from '../../repositories/ideaRepository';
 import { findSimilarNataliaPosts } from '../../repositories/nataliaPostRepository';
-import { SIMILARITY_THRESHOLD } from './deduplication.config';
+import { withRetry } from '../../shared/utils/retry';
+import { SIMILARITY_THRESHOLD, DEDUPLICATION_RETRY_CONFIG } from './deduplication.config';
 import type { DeduplicationStats, DeduplicateIdeasOptions } from './deduplication.types';
 
 export async function deduplicateIdeas(
@@ -45,50 +40,50 @@ export async function deduplicateIdeas(
     try {
       const embeddingArray = parseEmbeddingString(idea.embedding);
 
-      const similarIdeas = await findSimilarIdeas(
-        embeddingArray,
-        SIMILARITY_THRESHOLD,
-        idea.id
-      );
-
-      if (similarIdeas.length > 0) {
-        const match = similarIdeas[0];
-        
-        await markAsDuplicate(
-          idea.id,
-          'idea',
-          match.id,
-          match.similarity
+      await withRetry(async () => {
+        const similarIdeas = await findSimilarIdeas(
+          embeddingArray,
+          SIMILARITY_THRESHOLD,
+          idea.id
         );
 
-        stats.duplicates++;
-        stats.duplicatesWithIdeas++;
-        onProgress?.(i + 1, ideas.length);
-        continue;
-      }
+        if (similarIdeas.length > 0) {
+          const match = similarIdeas[0];
+          
+          await markAsDuplicate(
+            idea.id,
+            'idea',
+            match.id,
+            match.similarity
+          );
 
-      const similarPosts = await findSimilarNataliaPosts(
-        embeddingArray,
-        SIMILARITY_THRESHOLD
-      );
+          stats.duplicates++;
+          stats.duplicatesWithIdeas++;
+          return;
+        }
 
-      if (similarPosts.length > 0) {
-        const match = similarPosts[0];
-        
-        await markAsDuplicate(
-          idea.id,
-          'nataliaPost',
-          match.id,
-          match.similarity
+        const similarPosts = await findSimilarNataliaPosts(
+          embeddingArray,
+          SIMILARITY_THRESHOLD
         );
 
-        stats.duplicates++;
-        stats.duplicatesWithNataliaPosts++;
-        onProgress?.(i + 1, ideas.length);
-        continue;
-      }
+        if (similarPosts.length > 0) {
+          const match = similarPosts[0];
+          
+          await markAsDuplicate(
+            idea.id,
+            'nataliaPost',
+            match.id,
+            match.similarity
+          );
 
-      stats.unique++;
+          stats.duplicates++;
+          stats.duplicatesWithNataliaPosts++;
+          return;
+        }
+
+        stats.unique++;
+      }, DEDUPLICATION_RETRY_CONFIG);
 
     } catch (error) {
       stats.failed++;

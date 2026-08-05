@@ -14,7 +14,7 @@ import {
   IDEA_MAX_TOKENS,
   IDEA_TEMPERATURE,
 } from './ideaExtractor.config';
-import type { GeneratedIdea } from '../types/idea.types';
+import type { GeneratedIdea } from '../shared/types/idea.types';
 
 /**
  * Генерирует структурированную идею из текста поста конкурента через LLM.

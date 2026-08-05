@@ -14,7 +14,7 @@ import type {
   IdeaProcessOptions,
   IdeaProcessStats,
 } from './ideaProcessor.types';
-import type { IdeaProcessItem } from '../../types/idea.types';
+import type { IdeaProcessItem, IdeaProcessStage } from '../../shared/types/idea.types';
 
 /**
  * Обрабатывает батч постов конкурентов с генерацией идей.
@@ -47,7 +47,7 @@ export async function processIdeaBatch(
   let lastStart = 0;
 
   async function processItem(item: IdeaProcessItem): Promise<void> {
-    let stage: 'extractIdea' | 'embedding' | 'save' = 'extractIdea';
+    let stage: IdeaProcessStage = 'extractIdea';
     
     try {
       // ЭТАП 1: Генерация идеи через LLM

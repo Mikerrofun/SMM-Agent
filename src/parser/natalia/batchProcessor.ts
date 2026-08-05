@@ -1,6 +1,6 @@
 import { Api } from 'telegram';
 import { createManyNataliaPosts } from '../../repositories/nataliaPostRepository';
-import { CreateNataliaPostInput, ParseStatistics, ProgressCallback } from '../../types/nataliaPost.types';
+import { CreateNataliaPostInput, ParseStatistics, ProgressCallback } from '../../shared/types/nataliaPost.types';
 import { validateMessageData } from '../../shared/telegram/validators';
 import { extractMessageText, extractMessageDate } from '../../shared/telegram/transformers';
 import { PARSER_CONFIG } from './config';

@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import { CreateNataliaPostInput } from '../types/nataliaPost.types';
+import { CreateNataliaPostInput } from '../shared/types/nataliaPost.types';
 
 export async function getLatestPublishedDate(): Promise<Date | null> {
   const latestPost = await prisma.nataliaPost.findFirst({

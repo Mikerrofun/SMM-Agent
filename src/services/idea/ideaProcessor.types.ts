@@ -1,4 +1,4 @@
-import type { IdeaProcessItem } from '../../types/idea.types';
+import type { IdeaProcessItem, IdeaProcessStage } from '../../shared/types/idea.types';
 
 export interface IdeaProcessOptions {
   items: IdeaProcessItem[];
@@ -7,7 +7,7 @@ export interface IdeaProcessOptions {
 
 export interface FailedItem {
   id: string;
-  stage: 'extractIdea' | 'embedding' | 'save'; // Stage where the error occurred
+  stage: IdeaProcessStage; // Stage where the error occurred
   error: string;
 }
 

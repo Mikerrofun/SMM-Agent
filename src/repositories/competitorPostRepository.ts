@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import { CreateCompetitorPostInput } from '../types/competitorPost.types';
+import { CreateCompetitorPostInput } from '../shared/types/competitorPost.types';
 
 export async function createManyCompetitorPosts(
   posts: CreateCompetitorPostInput[]

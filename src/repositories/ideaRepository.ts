@@ -226,3 +226,29 @@ export async function markAsDuplicate(
     throw new Error(`Failed to mark idea ${ideaId} as duplicate: ${message}`);
   }
 }
+
+/**
+ * Обновляет статус идей с NEW на SENT атомарно.
+ * Используется после отправки идей пользователю в Telegram.
+ *
+ * @param ideaIds — массив ID идей для обновления статуса
+ * @returns количество обновленных записей
+ * @throws при ошибке БД
+ */
+export async function markIdeasAsSent(ideaIds: string[]): Promise<number> {
+  if (ideaIds.length === 0) {
+    return 0;
+  }
+
+  const result = await prisma.idea.updateMany({
+    where: {
+      id: { in: ideaIds },
+      status: 'NEW',
+    },
+    data: {
+      status: 'SENT',
+    },
+  });
+
+  return result.count;
+}

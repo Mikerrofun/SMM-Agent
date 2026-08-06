@@ -1,9 +1,6 @@
 import { prisma } from '../db/client';
 import { GenerationRun, RunStatus } from '../db/generated/client';
 
-/**
- * Получить последний успешный прогон генерации
- */
 export async function getLastSuccessfulRun(): Promise<GenerationRun | null> {
   return prisma.generationRun.findFirst({
     where: {
@@ -15,14 +12,6 @@ export async function getLastSuccessfulRun(): Promise<GenerationRun | null> {
   });
 }
 
-/**
- * Определить cutoff date для парсинга
- * - Если есть последний успешный прогон → его finishedAt
- * - Если нет → текущая дата минус lookbackDays
- * 
- * @param lookbackDays - Кол-во дней назад для первого запуска
- * @returns Date для фильтрации постов
- */
 export async function determineCutoffDate(lookbackDays: number): Promise<Date> {
   const lastRun = await getLastSuccessfulRun();
   
@@ -42,4 +31,54 @@ export async function determineCutoffDate(lookbackDays: number): Promise<Date> {
   );
   
   return cutoffDate;
+}
+
+export async function createGenerationRun(): Promise<GenerationRun> {
+  return prisma.generationRun.create({
+    data: {
+      status: RunStatus.RUNNING,
+    },
+  });
+}
+
+export async function updateGenerationRunSuccess(
+  runId: string,
+  stats: {
+    processedPosts: number;
+    generatedIdeas: number;
+    acceptedIdeas: number;
+  }
+): Promise<void> {
+  await prisma.generationRun.update({
+    where: { id: runId },
+    data: {
+      finishedAt: new Date(),
+      status: RunStatus.SUCCESS,
+      processedPosts: stats.processedPosts,
+      generatedIdeas: stats.generatedIdeas,
+      acceptedIdeas: stats.acceptedIdeas,
+    },
+  });
+}
+
+export async function updateGenerationRunFailed(
+  runId: string,
+  partialStats?: {
+    processedPosts?: number;
+    generatedIdeas?: number;
+    acceptedIdeas?: number;
+  }
+): Promise<void> {
+  await prisma.generationRun.update({
+    where: { id: runId },
+    data: {
+      finishedAt: new Date(),
+      status: RunStatus.FAILED,
+      ...(partialStats && {
+        processedPosts: partialStats.processedPosts ?? 0,
+        generatedIdeas: partialStats.generatedIdeas ?? 0,
+        acceptedIdeas: partialStats.acceptedIdeas ?? 0,
+      }),
+    },
+  });
 }

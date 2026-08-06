@@ -38,7 +38,7 @@ export type DuplicateOfType = 'idea' | 'nataliaPost';
 
 ```ts
 // src/services/idea/deduplication.config.ts
-export const SIMILARITY_THRESHOLD = 0.85;  // cosine similarity порог
+export const SIMILARITY_THRESHOLD = 0.75;  // cosine similarity порог
 export const DEDUPLICATION_STRATEGY = 'first' as const;  // оставляем самую старую
 ```
 
@@ -102,6 +102,18 @@ export async function markAsDuplicate(
     WHERE id = ${ideaId}
   `;
 }
+
+// 4. Записать максимальную similarity для уникальной идеи
+export async function updateMaxSimilarity(
+  ideaId: string,
+  similarity: number
+): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "Idea"
+    SET similarity = ${similarity}
+    WHERE id = ${ideaId}
+  `;
+}
 ```
 
 ```ts
@@ -149,39 +161,54 @@ export async function deduplicateIdeas(
     const embeddingArray = parseEmbeddingString(idea.embedding);
     
     try {
-      // 2a. Проверка Idea vs Idea
-      const similarIdeas = await findSimilarIdeas(
-        embeddingArray,
-        SIMILARITY_THRESHOLD,
-        idea.id
-      );
+      // 2a. Ищем все похожие (threshold = 0, чтобы найти ближайшие)
+      const allSimilarIdeas = await findSimilarIdeas(embeddingArray, 0, idea.id);
+      const allSimilarPosts = await findSimilarNataliaPosts(embeddingArray, 0);
       
-      if (similarIdeas.length > 0) {
-        const match = similarIdeas[0];  // самая старая по createdAt
-        await markAsDuplicate(idea.id, 'idea', match.id, match.similarity);
-        stats.duplicates++;
-        stats.duplicatesWithIdeas++;
-        onProgress?.(i + 1, ideas.length);
-        continue;
+      const bestIdeaMatch = allSimilarIdeas[0];
+      const bestPostMatch = allSimilarPosts[0];
+      
+      let maxSimilarity = 0;
+      let isDuplicate = false;
+      let duplicateSource: 'idea' | 'nataliaPost' | null = null;
+      let duplicateId: string | null = null;
+      
+      // 2b. Определяем максимальную similarity
+      if (bestIdeaMatch && bestIdeaMatch.similarity > maxSimilarity) {
+        maxSimilarity = bestIdeaMatch.similarity;
+        if (maxSimilarity >= SIMILARITY_THRESHOLD) {
+          isDuplicate = true;
+          duplicateSource = 'idea';
+          duplicateId = bestIdeaMatch.id;
+        }
       }
       
-      // 2b. Проверка Idea vs NataliaPost
-      const similarPosts = await findSimilarNataliaPosts(
-        embeddingArray,
-        SIMILARITY_THRESHOLD
-      );
-      
-      if (similarPosts.length > 0) {
-        const match = similarPosts[0];
-        await markAsDuplicate(idea.id, 'nataliaPost', match.id, match.similarity);
-        stats.duplicates++;
-        stats.duplicatesWithNataliaPosts++;
-        onProgress?.(i + 1, ideas.length);
-        continue;
+      if (bestPostMatch && bestPostMatch.similarity > maxSimilarity) {
+        maxSimilarity = bestPostMatch.similarity;
+        if (maxSimilarity >= SIMILARITY_THRESHOLD) {
+          isDuplicate = true;
+          duplicateSource = 'nataliaPost';
+          duplicateId = bestPostMatch.id;
+        }
       }
       
-      // 2c. Уникальна
-      stats.unique++;
+      // 2c. Записываем результат
+      if (isDuplicate && duplicateSource && duplicateId) {
+        // Дубликат: записываем similarity и помечаем как DUPLICATE
+        await markAsDuplicate(idea.id, duplicateSource, duplicateId, maxSimilarity);
+        stats.duplicates++;
+        if (duplicateSource === 'idea') {
+          stats.duplicatesWithIdeas++;
+        } else {
+          stats.duplicatesWithNataliaPosts++;
+        }
+      } else {
+        // Уникальная: записываем максимальную similarity (для аналитики)
+        if (maxSimilarity > 0) {
+          await updateMaxSimilarity(idea.id, maxSimilarity);
+        }
+        stats.unique++;
+      }
       
     } catch (error) {
       stats.failed++;
@@ -259,7 +286,7 @@ CLI выводит статистику (total, unique, duplicates, failed)
 
 5. **`DuplicateOfType` в `idea.types.ts`, а не в `deduplication.types.ts`** — тип переиспользуется в repository методах (`markAsDuplicate`) и в схеме БД. Общий тип лежит в shared/types, специфичные для дедупликации (`SimilarityMatch`, `DeduplicationStats`) — в сервисном модуле.
 
-6. **Два этапа проверки (Idea → NataliaPost), а не параллельный поиск** — приоритет: сначала ищем дубли среди идей (быстрее, меньше записей), потом — среди постов Натальи. Первый найденный дубликат прерывает проверку для идеи (continue). Это оптимизация: если идея — дубль другой идеи, нет смысла проверять посты Натальи.
+6. **Поиск всех похожих (threshold = 0), а не только выше порога** — сначала ищем все близкие совпадения среди идей и постов Натальи, затем сравниваем их и выбираем максимальную similarity. Если maxSimilarity >= SIMILARITY_THRESHOLD (0.75) → помечаем как дубликат. Если меньше → записываем maxSimilarity в БД для аналитики. Это позволяет видеть "почти дубликаты" (например, similarity = 0.71) и корректировать порог при необходимости.
 
 ## Преимущества
 
@@ -270,3 +297,4 @@ CLI выводит статистику (total, unique, duplicates, failed)
 - ✅ Гибкая конфигурация (порог similarity, стратегия выбора "победителя")
 - ✅ Прогресс-бар в CLI — видно, сколько обработано в реальном времени
 - ✅ Репозиторий паттерн — логика векторного поиска инкапсулирована, легко протестировать
+- ✅ **Записывается максимальная similarity для ВСЕХ идей** — даже уникальные идеи получают поле similarity (максимальное значение среди проверенных источников: других идей или постов Натальи). Это позволяет анализировать "почти дубликаты" и корректировать порог дедупликации на основе реальных данных

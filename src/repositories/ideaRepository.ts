@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
-import type { CreateIdeaInput, IdeaProcessItem, IdeaStatus } from '../shared/types/idea.types';
+import type { CreateIdeaInput, IdeaProcessItem, IdeaStatus, IdeaWithEmbedding } from '../shared/types/idea.types';
 import type { IdeaModel } from '../db/generated/models/Idea';
+import type { SimilarityMatch, DuplicateOfType } from '../services/idea/deduplication.types';
 
 
 export async function getUnprocessedCompetitorPosts(): Promise<IdeaProcessItem[]> {
@@ -137,4 +138,91 @@ export async function countIdeasByStatus(
       status,
     },
   });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Методы для дедупликации через векторный поиск
+// ─────────────────────────────────────────────────────────────
+
+export async function getNewIdeasWithEmbeddings(): Promise<IdeaWithEmbedding[]> {
+  const result = await prisma.$queryRaw<IdeaWithEmbedding[]>`
+    SELECT id, embedding::text, "createdAt"
+    FROM "Idea"
+    WHERE status = 'NEW'
+      AND embedding IS NOT NULL
+    ORDER BY "createdAt" ASC
+  `;
+
+  return result;
+}
+
+/**
+ * Находит похожие идеи через cosine similarity (pgvector).
+ * @param embedding — вектор для сравнения (массив чисел)
+ * @param threshold — минимальное значение similarity (от 0 до 1)
+ * @param excludeId — ID идеи, которую нужно исключить (не сравнивать саму с собой)
+ * @returns массив совпадений, отсортированных по createdAt ASC (самая старая первая)
+ * @throws при ошибке БД
+ */
+export async function findSimilarIdeas(
+  embedding: number[],
+  threshold: number,
+  excludeId: string
+): Promise<SimilarityMatch[]> {
+  const vectorLiteral = `[${embedding.join(',')}]`;
+
+  const result = await prisma.$queryRaw<
+    Array<{ id: string; similarity: number; createdAt: Date }>
+  >`
+    SELECT 
+      id,
+      (1 - (embedding <=> ${vectorLiteral}::vector)) AS similarity,
+      "createdAt"
+    FROM "Idea"
+    WHERE embedding IS NOT NULL
+      AND status = ANY(ARRAY['NEW', 'SENT']::"IdeaStatus"[])
+      AND id != ${excludeId}
+      AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
+    ORDER BY similarity DESC, "createdAt" ASC
+  `;
+
+  return result.map((row) => ({
+    id: row.id,
+    similarity: Number(row.similarity),
+    createdAt: row.createdAt,
+  }));
+}
+
+export async function updateMaxSimilarity(
+  ideaId: string,
+  similarity: number
+): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "Idea"
+    SET similarity = ${similarity}
+    WHERE id = ${ideaId}
+  `;
+}
+
+
+export async function markAsDuplicate(
+  ideaId: string,
+  duplicateOfType: DuplicateOfType,
+  duplicateOfId: string,
+  similarity: number
+): Promise<void> {
+  try {
+    await prisma.$executeRaw`
+      UPDATE "Idea"
+      SET 
+        status = 'DUPLICATE',
+        "duplicateOfType" = ${duplicateOfType},
+        "duplicateOfId" = ${duplicateOfId},
+        similarity = ${similarity}
+      WHERE id = ${ideaId}
+    `;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to mark idea ${ideaId} as duplicate: ${message}`);
+  }
 }

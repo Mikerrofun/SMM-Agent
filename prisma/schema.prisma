@@ -98,6 +98,10 @@ model Idea {
   // pgvector: вектор от title + thesis, для дедупликации. См. Embeddings.md
   embedding        Unsupported("vector(1536)")?
   status           IdeaStatus @default(NEW)
+  // Поля для отслеживания дубликатов (заполняются при similarity >= 0.85)
+  duplicateOfType  String? // 'idea' | 'nataliaPost'
+  duplicateOfId    String? // ID оригинальной записи (Idea.id или NataliaPost.id)
+  similarity       Float?  // Значение cosine similarity (0.0 - 1.0)
   createdAt        DateTime @default(now())
 
   competitorPost CompetitorPost @relation(fields: [competitorPostId], references: [id], onDelete: Cascade)

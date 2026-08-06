@@ -19,6 +19,12 @@ export interface CreateIdeaInput {
 }
 
 export interface IdeaProcessItem {
-  id: string;           // competitorPostId
-  text: string;         // пост конкурента
+  id: string;
+  text: string;
+}
+
+export interface IdeaWithEmbedding {
+  id: string;
+  embedding: string;   
+  createdAt: Date;
 }

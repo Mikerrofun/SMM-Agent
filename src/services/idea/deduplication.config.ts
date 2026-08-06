@@ -1,6 +1,6 @@
 import type { RetryConfig } from '../../shared/utils/retry';
 
-export const SIMILARITY_THRESHOLD = 0.85;
+export const SIMILARITY_THRESHOLD = 0.75;
 
 export const DEDUPLICATION_STRATEGY = 'first' as const;
 

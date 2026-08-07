@@ -52,9 +52,7 @@ export async function handleIdeasCommand(ctx: Context): Promise<void> {
       } catch (error) {
         console.error("Failed to mark ideas as SENT:", error);
       }
-    }
 
-    if (sentIdeaIds.length > 0) {
       await ctx.reply(
         `✅ Отправлено ${sentIdeaIds.length} ${pluralizeIdea(sentIdeaIds.length)}!`
       );
@@ -66,10 +64,13 @@ export async function handleIdeasCommand(ctx: Context): Promise<void> {
 
   } catch (error) {
     console.error("Error in /ideas command:", error);
+    
+    const errorMsg = error instanceof Error && error.message.includes('does not exist')
+      ? "❌ Ошибка подключения к базе данных.\nПроверьте DATABASE_URL в .env"
+      : "❌ Произошла ошибка при загрузке идей. Попробуйте позже.";
+    
     try {
-      await ctx.reply(
-        "❌ Произошла ошибка при загрузке идей. Попробуйте позже."
-      );
+      await ctx.reply(errorMsg);
     } catch (replyError) {
       console.error("Failed to send error message:", replyError);
     }

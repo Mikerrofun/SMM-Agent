@@ -102,23 +102,41 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
     const errorMessage = error instanceof Error ? error.message : "Неизвестная ошибка";
     
     try {
+      const shortError = errorMessage.length > 200 
+        ? errorMessage.substring(0, 200) + "..." 
+        : errorMessage;
+
       const errorMsg = 
         "❌ *Ошибка выполнения пайплайна*\n\n" +
-        `\`${escapeMarkdownV2(errorMessage)}\`\n\n` +
+        shortError + "\n\n" +
         "Проверьте логи для подробностей.";
 
       if (statusMessage) {
         await ctx.api.editMessageText(
           statusMessage.chat.id,
           statusMessage.message_id,
-          errorMsg,
-          { parse_mode: "Markdown" }
+          errorMsg
         );
       } else {
-        await ctx.reply(errorMsg, { parse_mode: "Markdown" });
+        await ctx.reply(errorMsg);
       }
     } catch (replyError) {
       console.error("Failed to send error message:", replyError);
+      
+      try {
+        const fallbackMsg = "❌ Ошибка выполнения пайплайна. Проверьте логи.";
+        if (statusMessage) {
+          await ctx.api.editMessageText(
+            statusMessage.chat.id,
+            statusMessage.message_id,
+            fallbackMsg
+          );
+        } else {
+          await ctx.reply(fallbackMsg);
+        }
+      } catch (fallbackError) {
+        console.error("Failed to send fallback message:", fallbackError);
+      }
     }
   } finally {
     isPipelineRunning = false;
@@ -173,8 +191,4 @@ function pluralizeNewIdea(count: number): string {
   }
 
   return "новых идей";
-}
-
-function escapeMarkdownV2(text: string): string {
-  return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 }

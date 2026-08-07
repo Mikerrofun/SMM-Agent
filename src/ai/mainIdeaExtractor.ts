@@ -10,17 +10,14 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { openai, DEFAULT_MODEL } from "../core/lib/openai";
 
-// Параметры LLM для извлечения mainIdea (согласно требованиям)
 const MAX_TOKENS = 200;
 const TEMPERATURE = 0.3;
 
-// Путь к промпту
 const PROMPT_PATH = resolve(
   process.cwd(),
   "src/prompts/extract-main-idea.md"
 );
 
-// Кэшируем промпт в памяти, чтобы не читать файл на каждый пост
 let cachedPrompt: string | null = null;
 
 function getSystemPrompt(): string {

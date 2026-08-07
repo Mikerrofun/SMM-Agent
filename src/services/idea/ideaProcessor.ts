@@ -100,10 +100,17 @@ export async function processIdeaBatch(
       stats.succeeded++;
     } catch (error) {
       stats.failed++;
+      const errorMessage = formatIdeaProcessError(error, stage, item.id);
+      console.error(`❌ Failed to process post ${item.id}: ${errorMessage}`);
+      
+      if (error instanceof Error && error.cause) {
+        console.error(`   Caused by: ${error.cause.message}`);
+      }
+      
       stats.failedItems.push({
         id: item.id,
         stage,
-        error: formatIdeaProcessError(error, stage, item.id),
+        error: errorMessage,
       });
     } finally {
       processed++;

@@ -103,7 +103,6 @@ export function initScheduler(): void {
       void runScheduledPipeline();
     },
     {
-      scheduled: true,
       timezone: "UTC", 
     }
   );

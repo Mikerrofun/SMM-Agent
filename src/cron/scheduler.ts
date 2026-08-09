@@ -3,9 +3,8 @@ import { Context } from "grammy";
 import { bot } from "../bot";
 import { handleRunPipelineCommand } from "../bot/commands/runPipeline";
 
-// Конфигурация из .env
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
-const CRON_ENABLED = process.env.CRON_ENABLED !== "false"; // По умолчанию включен
+const CRON_ENABLED = process.env.CRON_ENABLED !== "false"; 
 const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "0 7 * * 2,4"; // По умолчанию: вт и чт в 10:00 MSK (7:00 UTC)
 
 

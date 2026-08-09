@@ -1,15 +1,32 @@
 import { startBot } from "./index";
+import { initScheduler } from "../cron";
 
-// Запуск бота
-void startBot();
+async function main() {
+  try {
+    // Запуск бота
+    console.log("🚀 Запуск SMM Agent...\n");
+    
+    await startBot();
+    
+    initScheduler();
+    
+    console.log("\n✅ Все сервисы запущены успешно!\n");
+  } catch (error) {
+    console.error("❌ Ошибка запуска приложения:", error);
+    process.exit(1);
+  }
+}
 
-// Обработка graceful shutdown
+
+void main();
+
+
 process.once("SIGINT", () => {
-  console.log("Received SIGINT, stopping bot...");
+  console.log("\n🛑 Received SIGINT, stopping services...");
   process.exit(0);
 });
 
 process.once("SIGTERM", () => {
-  console.log("Received SIGTERM, stopping bot...");
+  console.log("\n🛑 Received SIGTERM, stopping services...");
   process.exit(0);
 });

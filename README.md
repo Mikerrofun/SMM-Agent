@@ -50,6 +50,8 @@ npm run dev
 - [docs/VISION.md](docs/VISION.md) — цели проекта, флоу MVP, принципы генерации.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — структура папок, стек, принципы
   организации кода.
+- [docs/RAILWAY_DEPLOYMENT.md](docs/RAILWAY_DEPLOYMENT.md) — деплой на Railway с Supabase.
+- [docs/CRON.md](docs/CRON.md) — настройка автоматических запусков по расписанию.
 - [docs/PARSING.md](docs/PARSING.md) — как работает парсинг Telegram-каналов (для других агентов).
 - [docs/NATALIA_PARSER.md](docs/NATALIA_PARSER.md) — парсер канала Натальи (@talant_director).
 - [docs/COMPETITORS_PARSER.md](docs/COMPETITORS_PARSER.md) — парсер каналов конкурентов (25 каналов).

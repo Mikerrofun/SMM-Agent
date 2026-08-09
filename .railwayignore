@@ -1,0 +1,43 @@
+# Railway ignore file - prevents uploading unnecessary files
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Next.js (не используется для бота)
+.next/
+out/
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Local env files (они будут в Variables на Railway)
+.env*
+!.env.example
+
+# Prisma local db
+prisma/*.db
+prisma/*.db-journal
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+.windsurf/
+.claude/
+
+# Git
+.git/

@@ -1,6 +1,7 @@
 import type { Context } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { getNewIdeasForSending, markIdeasAsSent } from "../../repositories/ideaRepository";
+import { generatePostForIdea, regeneratePostForIdea } from "../../services/post/postGenerationService";
 
 export async function handleIdeasCommand(ctx: Context): Promise<void> {
   try {
@@ -89,22 +90,138 @@ export async function handleGeneratePostCallback(ctx: Context): Promise<void> {
     }
 
     const ideaId = callbackData.replace("generate_post:", "");
+    const messageId = ctx.callbackQuery?.message?.message_id;
 
     await ctx.answerCallbackQuery({
-      text: "🚧 Генерация постов в разработке. Скоро будет доступна!",
-      show_alert: true,
+      text: "⏳ Генерирую пост...",
     });
 
-    console.log(`User requested post generation for idea ${ideaId}`);
+    const statusMessage = await ctx.reply("⏳ Генерирую пост, это может занять несколько секунд...");
+    console.log(`Generating post for idea ${ideaId}`);
+
+    // Генерируем пост
+    const result = await generatePostForIdea(ideaId);
+
+    try {
+      await ctx.api.deleteMessage(ctx.chat!.id, statusMessage.message_id);
+    } catch (deleteError) {
+      console.error("Failed to delete status message:", deleteError);
+    }
+
+    if (!result.success) {
+      await ctx.reply(
+        `❌ *Не удалось сгенерировать пост*\n\n` +
+        `Ошибка: ${escapeMarkdown(result.error)}\n\n` +
+        `Попробуйте ещё раз через кнопку "✍️ Сгенерировать пост"`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    const keyboard = new InlineKeyboard().text(
+      "🔄 Перегенерировать",
+      `regenerate_post:${ideaId}`
+    );
+
+    await ctx.reply(
+      `✅ *Сгенерированный пост:*\n\n${escapeMarkdown(result.postText)}`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+        ...(messageId && { reply_to_message_id: messageId }),
+      }
+    );
+
+    console.log(`✅ Successfully generated post for idea ${ideaId}`);
 
   } catch (error) {
     console.error("Error in generate_post callback:", error);
+    
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : "Неизвестная ошибка";
+
     try {
+      await ctx.reply(
+        `❌ *Произошла ошибка при генерации поста*\n\n` +
+        `${escapeMarkdown(errorMessage)}\n\n` +
+        `Попробуйте ещё раз или обратитесь к администратору.`,
+        { parse_mode: "Markdown" }
+      );
+    } catch (replyError) {
+      console.error("Failed to send error message:", replyError);
+    }
+  }
+}
+
+export async function handleRegeneratePostCallback(ctx: Context): Promise<void> {
+  try {
+    const callbackData = ctx.callbackQuery?.data;
+    
+    if (!callbackData || !callbackData.startsWith("regenerate_post:")) {
       await ctx.answerCallbackQuery({
-        text: "❌ Произошла ошибка",
+        text: "❌ Неверные данные",
       });
-    } catch (answerError) {
-      console.error("Failed to answer callback query:", answerError);
+      return;
+    }
+
+    const ideaId = callbackData.replace("regenerate_post:", "");
+
+    // Подтверждаем получение callback
+    await ctx.answerCallbackQuery({
+      text: "⏳ Перегенерирую пост...",
+    });
+
+    // Отправляем временное сообщение
+    const statusMessage = await ctx.reply("⏳ Перегенерирую пост, это может занять несколько секунд...");
+
+    console.log(`Regenerating post for idea ${ideaId}`);
+
+    // Перегенерируем пост
+    const result = await regeneratePostForIdea(ideaId);
+
+    // Удаляем временное сообщение
+    try {
+      await ctx.api.deleteMessage(ctx.chat!.id, statusMessage.message_id);
+    } catch (deleteError) {
+      console.error("Failed to delete status message:", deleteError);
+    }
+
+    if (!result.success) {
+      await ctx.reply(
+        `❌ *Не удалось перегенерировать пост*\n\n` +
+        `Ошибка: ${escapeMarkdown(result.error)}`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    // Создаём клавиатуру с кнопкой перегенерации
+    const keyboard = new InlineKeyboard().text(
+      "🔄 Перегенерировать",
+      `regenerate_post:${ideaId}`
+    );
+
+    // Отправляем новый пост
+    await ctx.reply(
+      `✅ *Новая версия поста:*\n\n${escapeMarkdown(result.postText)}`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      }
+    );
+
+    console.log(`✅ Successfully regenerated post for idea ${ideaId}`);
+
+  } catch (error) {
+    console.error("Error in regenerate_post callback:", error);
+    
+    try {
+      await ctx.reply(
+        `❌ Произошла ошибка при перегенерации поста. Попробуйте ещё раз.`,
+      );
+    } catch (replyError) {
+      console.error("Failed to send error message:", replyError);
     }
   }
 }

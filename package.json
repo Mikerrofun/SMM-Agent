@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && TURBOPACK=0 next build",
+    "build": "prisma generate && NEXT_SKIP_PRERENDER=1 next build",
     "start": "next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",

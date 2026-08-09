@@ -1,1 +1,1 @@
-worker: npm run bot
+worker: npx prisma generate && npm run bot

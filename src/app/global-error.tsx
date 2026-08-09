@@ -1,5 +1,8 @@
 'use client';
 
+// Отключаем prerender для этой страницы
+export const dynamic = 'error';
+
 export default function GlobalError({
   error,
   reset,

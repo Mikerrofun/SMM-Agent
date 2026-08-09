@@ -1,15 +1,7 @@
+import { config as loadEnv } from "dotenv";
 import { defineConfig } from "prisma/config";
 
-const directUrl = process.env.DIRECT_URL;
-const databaseUrl = process.env.DATABASE_URL;
-
-const url = directUrl || databaseUrl;
-
-if (!url) {
-  throw new Error(
-    "Missing database connection: neither DIRECT_URL nor DATABASE_URL is set"
-  );
-}
+loadEnv({ path: ".env" });
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -17,6 +9,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url,
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });

@@ -104,7 +104,7 @@ export async function processIdeaBatch(
       console.error(`❌ Failed to process post ${item.id}: ${errorMessage}`);
       
       if (error instanceof Error && error.cause) {
-        console.error(`   Caused by: ${error.cause.message}`);
+        console.error(`   Caused by: ${error.cause}`);
       }
       
       stats.failedItems.push({

@@ -1,6 +1,10 @@
+import { resolve } from 'path';
 import type { RetryConfig } from '../shared/utils/retry';
 
-export const POST_PROMPT_PATH = 'generate-post.md';
+export const POST_PROMPT_PATH = resolve(
+  process.cwd(),
+  'src/prompts/generate-post.md'
+);
 export const POST_MAX_TOKENS = 2000;
 export const POST_TEMPERATURE = 0.7;
 

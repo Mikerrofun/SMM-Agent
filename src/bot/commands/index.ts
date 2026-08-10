@@ -1,2 +1,2 @@
-export { handleIdeasCommand, handleGeneratePostCallback } from "./ideas";
+export { handleIdeasCommand, handleGeneratePostCallback, handleRegeneratePostCallback } from "./ideas";
 export { handleRunPipelineCommand, handleRunPipelineCallback } from "./runPipeline";

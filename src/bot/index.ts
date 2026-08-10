@@ -4,6 +4,7 @@ import { resolve } from "path";
 import {
   handleIdeasCommand,
   handleGeneratePostCallback,
+  handleRegeneratePostCallback,
   handleRunPipelineCommand,
   handleRunPipelineCallback,
 } from "./commands";
@@ -55,6 +56,7 @@ bot.command("status", async (ctx) => {
 });
 
 bot.callbackQuery(/^generate_post:/, handleGeneratePostCallback);
+bot.callbackQuery(/^regenerate_post:/, handleRegeneratePostCallback);
 bot.callbackQuery("run_pipeline", handleRunPipelineCallback);
 
 bot.catch((error) => {

@@ -185,7 +185,7 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
 }
 
 function escapeMarkdown(text: string): string {
-  return text.replace(/([_*[\]()~`>#+\-=|{}])/g, "\\$1");
+  return text.replace(/([_*[\]()~`>#+|{}])/g, "\\$1");
 }
 
 function pluralizeIdea(count: number): string {

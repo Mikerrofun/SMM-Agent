@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { getNewIdeasForSending, markIdeasAsSent } from "../../repositories/ideaRepository";
-import { generatePostForIdea, regeneratePostForIdea } from "../../services/post/postGenerationService";
+import { generatePostForIdea } from "../../services/post/postGenerationService";
 
 export async function handleIdeasCommand(ctx: Context): Promise<void> {
   try {
@@ -165,69 +165,27 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
       return;
     }
 
-    const ideaId = callbackData.replace("regenerate_post:", "");
-
-    // Подтверждаем получение callback
+    // Заглушка: функция в разработке
     await ctx.answerCallbackQuery({
-      text: "⏳ Перегенерирую пост...",
+      text: "🚧 Функция в разработке",
+      show_alert: true,
     });
-
-    // Отправляем временное сообщение
-    const statusMessage = await ctx.reply("⏳ Перегенерирую пост, это может занять несколько секунд...");
-
-    console.log(`Regenerating post for idea ${ideaId}`);
-
-    // Перегенерируем пост
-    const result = await regeneratePostForIdea(ideaId);
-
-    // Удаляем временное сообщение
-    try {
-      await ctx.api.deleteMessage(ctx.chat!.id, statusMessage.message_id);
-    } catch (deleteError) {
-      console.error("Failed to delete status message:", deleteError);
-    }
-
-    if (!result.success) {
-      await ctx.reply(
-        `❌ *Не удалось перегенерировать пост*\n\n` +
-        `Ошибка: ${escapeMarkdown(result.error)}`,
-        { parse_mode: "Markdown" }
-      );
-      return;
-    }
-
-    // Создаём клавиатуру с кнопкой перегенерации
-    const keyboard = new InlineKeyboard().text(
-      "🔄 Перегенерировать",
-      `regenerate_post:${ideaId}`
-    );
-
-    // Отправляем новый пост
-    await ctx.reply(
-      `✅ *Новая версия поста:*\n\n${escapeMarkdown(result.postText)}`,
-      {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      }
-    );
-
-    console.log(`✅ Successfully regenerated post for idea ${ideaId}`);
 
   } catch (error) {
     console.error("Error in regenerate_post callback:", error);
     
     try {
-      await ctx.reply(
-        `❌ Произошла ошибка при перегенерации поста. Попробуйте ещё раз.`,
-      );
+      await ctx.answerCallbackQuery({
+        text: "❌ Произошла ошибка",
+      });
     } catch (replyError) {
-      console.error("Failed to send error message:", replyError);
+      console.error("Failed to answer callback query:", replyError);
     }
   }
 }
 
 function escapeMarkdown(text: string): string {
-  return text.replace(/([_*[\]()~`>#+\-=|{}.!])/g, "\\$1");
+  return text.replace(/([_*[\]()~`>#+\-=|{}])/g, "\\$1");
 }
 
 function pluralizeIdea(count: number): string {

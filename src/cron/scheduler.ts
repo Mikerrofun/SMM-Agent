@@ -5,7 +5,7 @@ import { handleRunPipelineCommand } from "../bot/commands/runPipeline";
 
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const CRON_ENABLED = process.env.CRON_ENABLED !== "false"; 
-const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "0 7 * * 2,4"; // По умолчанию: вт и чт в 10:00 MSK (7:00 UTC)
+const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "50 6 * * 2,4"; // По умолчанию: вт и чт в 9:50 MSK (6:50 UTC)
 
 
 function createCronContext(chatId: string): Context {
@@ -34,6 +34,20 @@ async function runScheduledPipeline(): Promise<void> {
   }
 
   try {
+    const dayOfWeek = new Date().toLocaleDateString("ru-RU", {
+      weekday: "long",
+      timeZone: "Europe/Moscow"
+    });
+
+    await bot.api.sendMessage(
+      ADMIN_CHAT_ID,
+      `🤖 Автоматический запуск pipeline\n\n` +
+      `📅 ${dayOfWeek}\n` +
+      `⏰ ${moscowTime}\n\n` +
+      `⏳ Начинаю обработку...`,
+      { parse_mode: "Markdown" }
+    );
+
     const ctx = createCronContext(ADMIN_CHAT_ID);
     
     await handleRunPipelineCommand(ctx);

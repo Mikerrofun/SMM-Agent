@@ -109,6 +109,28 @@ This document describes the Telegram bot commands implemented for the SMM Agent 
 
 ---
 
+### `/transcript_post`
+**Description:** Generates 2 posts from a client meeting transcript (PDF)
+
+**Handler:** `src/bot/commands/transcriptPost.ts`
+
+**Flow:**
+1. Command sets the user into "waiting for PDF" state and asks for the file
+2. `bot.on("message:document")` picks up the next document from that user
+3. Validation: PDF mime type / `.pdf` extension, max 10MB
+4. File is downloaded from Telegram, text extracted via `extractTextFromPdf()`
+5. Text saved as `ClientTranscript`, status message "⏳ Генерирую посты..." shown
+6. `processTranscript()` generates 2 posts (up to 3 attempts each, dedup threshold 0.75)
+7. Posts sent one by one, duplicates marked "⚠️ (похож на существующий, similarity: X)"
+8. Summary message describes the result
+
+**Errors shown to the user:** wrong format, file too large, password-protected PDF,
+no text layer, too little text (< 100 chars).
+
+Details: [features/TRANSCRIPT_POST_GENERATION.md](features/TRANSCRIPT_POST_GENERATION.md)
+
+---
+
 ### `/status`
 **Description:** Health check for the bot
 

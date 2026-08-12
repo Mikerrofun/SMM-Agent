@@ -3,6 +3,8 @@
 Персональный AI-ассистент для создания контент-плана и подготовки публикаций
 в Telegram-канале. Анализирует публикации конкурентов, предлагает идеи для
 постов и помогает генерировать полноценные публикации в авторском стиле.
+Второй источник контента — транскрипции встреч с клиентами: команда
+`/transcript_post` принимает PDF и возвращает 2 готовых поста.
 
 Финальное решение о выборе идеи и публикации всегда принимает человек — система
 ничего не публикует автоматически.
@@ -56,4 +58,5 @@ npm run dev
 - [docs/NATALIA_PARSER.md](docs/NATALIA_PARSER.md) — парсер канала Натальи (@talant_director).
 - [docs/COMPETITORS_PARSER.md](docs/COMPETITORS_PARSER.md) — парсер каналов конкурентов (25 каналов).
 - [docs/MAIN_IDEA_EXTRACTION.md](docs/MAIN_IDEA_EXTRACTION.md) — извлечение главной мысли (mainIdea) через LLM.
+- [docs/features/TRANSCRIPT_POST_GENERATION.md](docs/features/TRANSCRIPT_POST_GENERATION.md) — генерация постов из транскрипций встреч (`/transcript_post`).
 

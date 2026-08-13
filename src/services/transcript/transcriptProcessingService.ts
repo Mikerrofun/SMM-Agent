@@ -60,8 +60,7 @@ export async function processTranscript(
   const postsToSend: TranscriptPostData[] = [];
   const usedMainIdeas: string[] = [];
 
-  // Отклонённые черновики остаются в БД с embedding'ом, поэтому копим их id
-  // на весь прогон: иначе пост №2 сравнивался бы с браком от поста №1.
+  // отклонённые черновики остаются в БД с embedding'ом — исключаем их из дедупликации
   const rejectedDraftIds: string[] = [];
 
   for (let postIndex = 1; postIndex <= POSTS_PER_TRANSCRIPT; postIndex++) {
@@ -115,8 +114,7 @@ export async function processTranscript(
           break;
         }
 
-        // Попытка — дубль. Держим ту, что дальше всего от повтора: если все
-        // MAX_ATTEMPTS_PER_POST попыток провалятся, отдадим именно её.
+        // дубль: держим попытку с минимальной similarity как fallback
         if (
           bestCandidate === null ||
           dedupResult.maxSimilarity < bestCandidate.similarity
@@ -143,8 +141,7 @@ export async function processTranscript(
         bestCandidate.similarity
       );
 
-      // Пост отдаём пользователю, значит следующий пост должен с ним
-      // сравниваться — убираем его из списка отклонённых черновиков.
+      // пост уходит пользователю — следующий должен с ним сравниваться
       const rejectedIndex = rejectedDraftIds.indexOf(bestCandidate.post.id);
       if (rejectedIndex !== -1) {
         rejectedDraftIds.splice(rejectedIndex, 1);

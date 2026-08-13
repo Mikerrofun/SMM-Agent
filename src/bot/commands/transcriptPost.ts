@@ -12,11 +12,13 @@ import { extractTextFromPdf } from '../../shared/utils/pdfParser';
 import { PdfParserError } from '../../shared/utils/pdfParser.errors';
 import { sleep } from '../../shared/utils/sleep';
 import type { TranscriptPostData } from '../../shared/types/transcript.types';
+import {
+  DELAY_BETWEEN_POSTS_MS,
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILE_SIZE_LABEL,
+} from './transcriptPost.config';
 
 const waitingForPdf = new Map<number, boolean>();
-
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; 
-const DELAY_BETWEEN_POSTS_MS = 500;
 
 export async function handleTranscriptCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -56,7 +58,7 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
   }
 
   if ((document.file_size ?? 0) > MAX_FILE_SIZE_BYTES) {
-    await ctx.reply('❌ Файл слишком большой (max 10MB)');
+    await ctx.reply(`❌ Файл слишком большой (max ${MAX_FILE_SIZE_LABEL})`);
     return;
   }
 

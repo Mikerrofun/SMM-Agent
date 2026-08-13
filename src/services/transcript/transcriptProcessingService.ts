@@ -57,20 +57,23 @@ export async function processTranscript(
   };
 
   const errors: string[] = [];
-  const acceptedPosts: TranscriptPostData[] = [];
-  const acceptedMainIdeas: string[] = [];
+  const postsToSend: TranscriptPostData[] = [];
+  const usedMainIdeas: string[] = [];
+
+  // Отклонённые черновики остаются в БД с embedding'ом, поэтому копим их id
+  // на весь прогон: иначе пост №2 сравнивался бы с браком от поста №1.
+  const rejectedDraftIds: string[] = [];
 
   for (let postIndex = 1; postIndex <= POSTS_PER_TRANSCRIPT; postIndex++) {
-    let accepted: TranscriptPostData | null = null;
+    let postToSend: TranscriptPostData | null = null;
     let bestCandidate: AttemptCandidate | null = null;
-    const draftIds: string[] = [];
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_POST; attempt++) {
       stats.totalAttempts++;
 
       try {
         const postText = await withRetry(
-          () => generatePostFromTranscript(transcript.text, acceptedMainIdeas),
+          () => generatePostFromTranscript(transcript.text, usedMainIdeas),
           AI_RETRY_CONFIG
         );
 
@@ -86,9 +89,10 @@ export async function processTranscript(
           attemptNumber: attempt,
         });
 
-        draftIds.push(post.id);
-
-        const dedupResult = await generateAndCheckEmbedding(mainIdea, draftIds);
+        const dedupResult = await generateAndCheckEmbedding(mainIdea, [
+          ...rejectedDraftIds,
+          post.id,
+        ]);
 
         await updateEmbedding(post.id, dedupResult.embedding);
 
@@ -105,18 +109,22 @@ export async function processTranscript(
             await updateSimilarity(post.id, dedupResult.maxSimilarity);
           }
 
-          accepted = { ...post, similarity: dedupResult.maxSimilarity };
-          acceptedMainIdeas.push(mainIdea);
+          postToSend = { ...post, similarity: dedupResult.maxSimilarity };
+          usedMainIdeas.push(mainIdea);
           stats.uniquePosts++;
           break;
         }
 
+        // Попытка — дубль. Держим ту, что дальше всего от повтора: если все
+        // MAX_ATTEMPTS_PER_POST попыток провалятся, отдадим именно её.
         if (
           bestCandidate === null ||
           dedupResult.maxSimilarity < bestCandidate.similarity
         ) {
           bestCandidate = { post, similarity: dedupResult.maxSimilarity };
         }
+
+        rejectedDraftIds.push(post.id);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(`post ${postIndex}, attempt ${attempt}: ${message}`);
@@ -129,17 +137,24 @@ export async function processTranscript(
       }
     }
 
-    if (accepted === null && bestCandidate !== null) {
-      const marked = await markAsDuplicate(
+    if (postToSend === null && bestCandidate !== null) {
+      postToSend = await markAsDuplicate(
         bestCandidate.post.id,
         bestCandidate.similarity
       );
-      accepted = marked;
-      acceptedMainIdeas.push(bestCandidate.post.mainIdea);
+
+      // Пост отдаём пользователю, значит следующий пост должен с ним
+      // сравниваться — убираем его из списка отклонённых черновиков.
+      const rejectedIndex = rejectedDraftIds.indexOf(bestCandidate.post.id);
+      if (rejectedIndex !== -1) {
+        rejectedDraftIds.splice(rejectedIndex, 1);
+      }
+
+      usedMainIdeas.push(bestCandidate.post.mainIdea);
       stats.duplicatePosts++;
     }
 
-    if (accepted === null) {
+    if (postToSend === null) {
       stats.failedPosts++;
       console.error('[TranscriptProcessing] Post generation failed', {
         transcriptId,
@@ -148,18 +163,18 @@ export async function processTranscript(
       continue;
     }
 
-    acceptedPosts.push(accepted);
+    postsToSend.push(postToSend);
 
     console.log('[TranscriptProcessing] Post generated', {
       postIndex,
-      postId: accepted.id,
-      isDuplicate: accepted.isDuplicate,
-      similarity: accepted.similarity,
-      finalAttempt: accepted.attemptNumber,
+      postId: postToSend.id,
+      isDuplicate: postToSend.isDuplicate,
+      similarity: postToSend.similarity,
+      finalAttempt: postToSend.attemptNumber,
     });
   }
 
-  if (acceptedPosts.length > 0) {
+  if (postsToSend.length > 0) {
     await markAsProcessed(transcriptId, new Date());
   }
 
@@ -173,7 +188,7 @@ export async function processTranscript(
 
   return {
     transcriptId,
-    posts: acceptedPosts,
+    posts: postsToSend,
     stats,
     errors,
   };

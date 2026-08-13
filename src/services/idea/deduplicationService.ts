@@ -7,6 +7,7 @@ import {
 import { findSimilarNataliaPosts } from '../../repositories/nataliaPostRepository';
 import { withRetry } from '../../shared/utils/retry';
 import { SIMILARITY_THRESHOLD, DEDUPLICATION_RETRY_CONFIG } from './deduplication.config';
+import { resolveBestMatch } from '../shared/similarityResolver';
 import type { DeduplicationStats, DeduplicateIdeasOptions } from './deduplication.types';
 
 export async function deduplicateIdeas(
@@ -49,31 +50,14 @@ export async function deduplicateIdeas(
           0
         );
 
-        const bestIdeaMatch = allSimilarIdeas[0];
-        const bestPostMatch = allSimilarPosts[0];
+        const { maxSimilarity, source, matchedId } = resolveBestMatch([
+          { source: 'idea' as const, matches: allSimilarIdeas },
+          { source: 'nataliaPost' as const, matches: allSimilarPosts },
+        ]);
 
-        let maxSimilarity = 0;
-        let isDuplicate = false;
-        let duplicateSource: 'idea' | 'nataliaPost' | null = null;
-        let duplicateId: string | null = null;
-
-        if (bestIdeaMatch && bestIdeaMatch.similarity > maxSimilarity) {
-          maxSimilarity = bestIdeaMatch.similarity;
-          if (maxSimilarity >= SIMILARITY_THRESHOLD) {
-            isDuplicate = true;
-            duplicateSource = 'idea';
-            duplicateId = bestIdeaMatch.id;
-          }
-        }
-
-        if (bestPostMatch && bestPostMatch.similarity > maxSimilarity) {
-          maxSimilarity = bestPostMatch.similarity;
-          if (maxSimilarity >= SIMILARITY_THRESHOLD) {
-            isDuplicate = true;
-            duplicateSource = 'nataliaPost';
-            duplicateId = bestPostMatch.id;
-          }
-        }
+        const isDuplicate = maxSimilarity >= SIMILARITY_THRESHOLD;
+        const duplicateSource = isDuplicate ? source : null;
+        const duplicateId = isDuplicate ? matchedId : null;
 
         if (isDuplicate && duplicateSource && duplicateId) {
           await markAsDuplicate(

@@ -16,7 +16,7 @@ import {
 } from './transcriptPostGenerator.config';
 
 
-export function truncateTranscript(text: string): string {
+export function prepareTranscriptText(text: string): string {
   if (text.length <= TRANSCRIPT_MAX_INPUT_LENGTH) {
     return text;
   }
@@ -38,7 +38,7 @@ export async function generatePostFromTranscript(
     throw new Error('Cannot generate post from empty transcript');
   }
 
-  const preparedText = truncateTranscript(trimmed);
+  const preparedText = prepareTranscriptText(trimmed);
   const systemPrompt = loadPrompt(TRANSCRIPT_PROMPT_PATH);
 
   const avoidBlock =

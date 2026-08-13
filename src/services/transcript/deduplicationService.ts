@@ -16,6 +16,7 @@ import {
   SIMILARITY_THRESHOLD,
   DEDUPLICATION_RETRY_CONFIG,
 } from '../idea/deduplication.config';
+import { resolveBestMatch } from '../shared/similarityResolver';
 import { DeduplicationError } from './errors';
 import type {
   DuplicationResult,
@@ -32,24 +33,10 @@ export async function checkPostDuplication(
     findSimilarPosts(embedding, 0, excludePostIds),
   ]);
 
-  const bestNatalia = nataliaMatches[0];
-  const bestTranscript = transcriptMatches[0];
-
-  let maxSimilarity = 0;
-  let source: DuplicationResult['source'] = null;
-  let matchedId: string | null = null;
-
-  if (bestNatalia && bestNatalia.similarity > maxSimilarity) {
-    maxSimilarity = bestNatalia.similarity;
-    source = 'natalia';
-    matchedId = bestNatalia.id;
-  }
-
-  if (bestTranscript && bestTranscript.similarity > maxSimilarity) {
-    maxSimilarity = bestTranscript.similarity;
-    source = 'transcript';
-    matchedId = bestTranscript.id;
-  }
+  const { maxSimilarity, source, matchedId } = resolveBestMatch([
+    { source: 'natalia' as const, matches: nataliaMatches },
+    { source: 'transcript' as const, matches: transcriptMatches },
+  ]);
 
   const isDuplicate = maxSimilarity >= SIMILARITY_THRESHOLD;
 

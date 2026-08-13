@@ -38,15 +38,6 @@ export async function updateEmbedding(
   `;
 }
 
-export async function getPostsByTranscriptId(
-  transcriptId: string
-): Promise<TranscriptPostData[]> {
-  return prisma.transcriptPost.findMany({
-    where: { transcriptId },
-    orderBy: { createdAt: 'asc' },
-  });
-}
-
 export async function markAsDuplicate(
   id: string,
   similarity: number

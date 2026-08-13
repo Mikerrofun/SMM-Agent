@@ -44,12 +44,3 @@ export async function markAsProcessed(
     data: { processedAt },
   });
 }
-
-export async function getRecentTranscripts(
-  limit = 10
-): Promise<ClientTranscriptData[]> {
-  return prisma.clientTranscript.findMany({
-    orderBy: { uploadedAt: 'desc' },
-    take: limit,
-  });
-}

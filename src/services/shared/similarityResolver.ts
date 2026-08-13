@@ -1,15 +1,5 @@
-import type { SimilarityMatch } from '../idea/deduplication.types';
+import type { SimilaritySource , ResolvedSimilarity } from '../shared/similarityResolver.types'
 
-export interface SimilaritySource<TSource extends string> {
-  source: TSource;
-  matches: SimilarityMatch[];
-}
-
-export interface ResolvedSimilarity<TSource extends string> {
-  maxSimilarity: number;
-  source: TSource | null;
-  matchedId: string | null;
-}
 
 // matches отсортированы по similarity DESC, поэтому сравниваем первый элемент
 export function resolveBestMatch<TSource extends string>(

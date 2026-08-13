@@ -22,13 +22,7 @@ import type {
   EmbeddingCheckResult,
 } from './deduplication.types';
 
-/**
- * Ищет максимальное совпадение вектора с NataliaPost и TranscriptPost.
- *
- * @param embedding — вектор проверяемого поста
- * @param excludePostIds — TranscriptPost, которые надо исключить из сравнения
- *                         (сам проверяемый пост и черновики неудачных попыток)
- */
+
 export async function checkPostDuplication(
   embedding: number[],
   excludePostIds: string[] = []
@@ -67,10 +61,7 @@ export async function checkPostDuplication(
   };
 }
 
-/**
- * Создаёт embedding из mainIdea и сразу проверяет его на дубли.
- * Оба шага обёрнуты в withRetry для устойчивости к временным сбоям API/БД.
- */
+
 export async function generateAndCheckEmbedding(
   mainIdea: string,
   excludePostIds: string[] = []

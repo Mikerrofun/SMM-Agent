@@ -15,17 +15,10 @@ import {
   PasswordProtectedPdfError,
 } from './pdfParser.errors';
 
-/** Минимальная длина текста, с которой имеет смысл генерировать посты. */
+
 export const MIN_PDF_TEXT_LENGTH = 100;
 
-/**
- * Нормализует извлечённый из PDF текст.
- *
- * - заменяет неразрывные пробелы на обычные
- * - схлопывает подряд идущие пробелы/табы
- * - схлопывает 3+ переносов строки до двух (сохраняем абзацы)
- * - trim по краям
- */
+
 export function normalizePdfText(raw: string): string {
   return raw
     .replace(/\u00A0/g, ' ')
@@ -36,16 +29,7 @@ export function normalizePdfText(raw: string): string {
     .trim();
 }
 
-/**
- * Извлекает и нормализует текст из PDF.
- *
- * @param buffer — содержимое PDF файла
- * @returns нормализованный текст
- * @throws InvalidPdfError — файл повреждён или не PDF
- * @throws PasswordProtectedPdfError — PDF защищён паролем
- * @throws EmptyPdfError — в PDF нет текстового слоя
- * @throws InsufficientContentError — текста меньше MIN_PDF_TEXT_LENGTH символов
- */
+
 export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
   if (!buffer || buffer.length === 0) {
     throw new InvalidPdfError('Получен пустой файл');

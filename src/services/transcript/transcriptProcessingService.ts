@@ -88,8 +88,6 @@ export async function processTranscript(
 
         draftIds.push(post.id);
 
-        // Исключаем сам пост и черновики неудачных попыток текущего поста,
-        // чтобы сравнение шло только с принятыми постами и NataliaPost.
         const dedupResult = await generateAndCheckEmbedding(mainIdea, draftIds);
 
         await updateEmbedding(post.id, dedupResult.embedding);

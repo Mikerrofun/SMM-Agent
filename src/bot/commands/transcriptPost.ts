@@ -13,10 +13,9 @@ import { PdfParserError } from '../../shared/utils/pdfParser.errors';
 import { sleep } from '../../shared/utils/sleep';
 import type { TranscriptPostData } from '../../shared/types/transcript.types';
 
-/** Пользователи, от которых бот ждёт PDF. */
 const waitingForPdf = new Map<number, boolean>();
 
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; 
 const DELAY_BETWEEN_POSTS_MS = 500;
 
 export async function handleTranscriptCommand(ctx: Context): Promise<void> {
@@ -158,9 +157,7 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
   }
 }
 
-/**
- * Отправляет сгенерированные посты и итоговое сообщение.
- */
+
 export async function sendTranscriptPosts(
   ctx: Context,
   posts: TranscriptPostData[]

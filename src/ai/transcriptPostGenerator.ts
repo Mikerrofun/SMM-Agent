@@ -15,10 +15,7 @@ import {
   TRANSCRIPT_TAIL_LENGTH,
 } from './transcriptPostGenerator.config';
 
-/**
- * Обрезает слишком длинную транскрипцию: начало + конец,
- * чтобы сохранить и контекст знакомства, и итоги встречи.
- */
+
 export function truncateTranscript(text: string): string {
   if (text.length <= TRANSCRIPT_MAX_INPUT_LENGTH) {
     return text;
@@ -30,13 +27,7 @@ export function truncateTranscript(text: string): string {
   return `${head}\n\n[...фрагмент транскрипции пропущен...]\n\n${tail}`;
 }
 
-/**
- * Генерирует пост из текста транскрипции.
- *
- * @param transcriptText — текст транскрипции встречи
- * @param excludeMainIdeas — главные мысли уже сгенерированных постов, чтобы не повторяться
- * @returns текст поста
- */
+
 export async function generatePostFromTranscript(
   transcriptText: string,
   excludeMainIdeas: string[] = []

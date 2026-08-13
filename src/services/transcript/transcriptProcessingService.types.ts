@@ -11,6 +11,5 @@ export interface ProcessingResult {
   transcriptId: string;
   posts: TranscriptPostData[];
   stats: ProcessingStats;
-  /** Ошибки, из-за которых какой-то из постов не удалось сгенерировать. */
   errors: string[];
 }

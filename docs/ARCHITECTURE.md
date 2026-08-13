@@ -135,6 +135,26 @@ Telegram Bot        (отправить идеи со статусом NEW)
 | `core` | Общая инфраструктура проекта |
 | `shared` | Общие утилиты и типы |
 
+Второй источник контента — транскрипции встреч с клиентами. Он живёт по тем же
+правилам: `shared/utils/pdfParser.ts` извлекает текст из PDF, `ai/transcriptPostGenerator.ts`
+пишет пост, `services/transcript/` координирует попытки и дедупликацию,
+`repositories/clientTranscriptRepository.ts` и `repositories/transcriptPostRepository.ts`
+работают с БД, `bot/commands/transcriptPost.ts` общается с пользователем.
+
+```
+PDF (Telegram) → pdfParser → ClientTranscript
+                                  ↓
+                    transcriptProcessingService (2 поста × до 3 попыток)
+                                  ↓
+      transcriptPostGenerator → mainIdeaExtractor → embeddings
+                                  ↓
+        дедупликация против NataliaPost + TranscriptPost (порог 0.75)
+                                  ↓
+                          TranscriptPost → Telegram
+```
+
+Подробности — в [features/TRANSCRIPT_POST_GENERATION.md](features/TRANSCRIPT_POST_GENERATION.md).
+
 ---
 
 # Структура проекта

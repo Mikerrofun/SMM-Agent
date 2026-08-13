@@ -124,6 +124,46 @@ model GeneratedPost {
 }
 
 // ─────────────────────────────────────────────────────────────
+// ClientTranscript — транскрипция встречи с клиентом (из PDF)
+// Источник контента для TranscriptPost.
+// ─────────────────────────────────────────────────────────────
+
+model ClientTranscript {
+  id          String    @id @default(cuid())
+  text        String
+  fileName    String?
+  uploadedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  posts TranscriptPost[]
+
+  @@index([uploadedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TranscriptPost — пост, сгенерированный из транскрипции
+// Дедуплицируется против NataliaPost и других TranscriptPost.
+// ─────────────────────────────────────────────────────────────
+
+model TranscriptPost {
+  id            String   @id @default(cuid())
+  transcriptId  String
+  text          String
+  mainIdea      String
+  // pgvector: Prisma хранит как Unsupported, работаем через raw SQL
+  embedding     Unsupported("vector(1536)")?
+  similarity    Float?
+  isDuplicate   Boolean  @default(false)
+  attemptNumber Int      @default(1)
+  createdAt     DateTime @default(now())
+
+  transcript ClientTranscript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+
+  @@index([transcriptId])
+  @@index([isDuplicate])
+}
+
+// ─────────────────────────────────────────────────────────────
 // GenerationRun — служебная запись о каждом прогоне генерации
 // ─────────────────────────────────────────────────────────────
 

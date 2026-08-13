@@ -7,6 +7,8 @@ import {
   handleRegeneratePostCallback,
   handleRunPipelineCommand,
   handleRunPipelineCallback,
+  handleTranscriptCommand,
+  handlePdfDocument,
 } from "./commands";
 
 if (typeof window === "undefined") {
@@ -39,6 +41,7 @@ bot.command("help", async (ctx) => {
     "/help — показать это сообщение\n" +
     "/ideas — получить новые идеи для постов\n" +
     "/run\\_pipeline — запустить генерацию идей\n" +
+    "/transcript\\_post — создать посты из транскрипции встречи\n" +
     "/status — статус системы\n\n" +
     "*Как это работает?*\n\n" +
     "1️⃣ Используй /run\\_pipeline для запуска анализа каналов конкурентов и генерации идей\n" +
@@ -50,6 +53,10 @@ bot.command("help", async (ctx) => {
 
 bot.command("ideas", handleIdeasCommand);
 bot.command("run_pipeline", handleRunPipelineCommand);
+bot.command("transcript_post", handleTranscriptCommand);
+
+// Срабатывает на все документы; внутри проверяется, ждём ли мы PDF от юзера
+bot.on("message:document", handlePdfDocument);
 
 bot.command("status", async (ctx) => {
   await ctx.reply("✅ Бот работает нормально!");
@@ -76,7 +83,7 @@ export async function startBot() {
   console.log("🤖 Starting Telegram bot...");
   await bot.start();
   console.log("✅ Telegram bot is running");
-  console.log("📱 Available commands: /start, /help, /ideas, /run_pipeline, /status");
+  console.log("📱 Available commands: /start, /help, /ideas, /run_pipeline, /transcript_post, /status");
 }
 
 export async function stopBot() {

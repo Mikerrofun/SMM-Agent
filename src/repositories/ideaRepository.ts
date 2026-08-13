@@ -24,10 +24,6 @@ export async function getUnprocessedCompetitorPosts(): Promise<IdeaProcessItem[]
 /**
  * Создаёт идею в БД и помечает связанный пост конкурента как обработанным.
  * Выполняется атомарно в транзакции.
- *
- * Embedding обязателен. Используется raw SQL для INSERT с pgvector типом.
- * Prisma не поддерживает vector тип нативно, поэтому используем $queryRaw.
- *
  * @param data — данные для создания идеи (включая обязательный embedding)
  * @returns созданная идея
  * @throws при ошибке БД

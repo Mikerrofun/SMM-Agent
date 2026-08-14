@@ -31,6 +31,11 @@ enum RunStatus {
   FAILED
 }
 
+enum TranscriptPostStatus {
+  REJECTED // Пост не прошёл проверку дедупликации (по умолчанию)
+  SENT     // Пост отправлен пользователю в боте
+}
+
 // ─────────────────────────────────────────────────────────────
 // Competitor — Telegram-каналы конкурентов
 // ─────────────────────────────────────────────────────────────
@@ -146,21 +151,25 @@ model ClientTranscript {
 // ─────────────────────────────────────────────────────────────
 
 model TranscriptPost {
-  id            String   @id @default(cuid())
+  id            String               @id @default(cuid())
   transcriptId  String
   text          String
   mainIdea      String
   // pgvector: Prisma хранит как Unsupported, работаем через raw SQL
   embedding     Unsupported("vector(1536)")?
+  // Статус: REJECTED по умолчанию, SENT после прохождения проверки
+  status        TranscriptPostStatus @default(REJECTED)
+  // Поля для отслеживания дубликатов (причина отклонения)
   similarity    Float?
-  isDuplicate   Boolean  @default(false)
-  attemptNumber Int      @default(1)
-  createdAt     DateTime @default(now())
+  isDuplicate   Boolean              @default(false)
+  attemptNumber Int                  @default(1)
+  createdAt     DateTime             @default(now())
 
   transcript ClientTranscript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
 
   @@index([transcriptId])
   @@index([isDuplicate])
+  @@index([transcriptId, status])
 }
 
 // ─────────────────────────────────────────────────────────────

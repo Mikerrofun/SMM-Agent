@@ -3,8 +3,8 @@
  *
  * Для каждого из POSTS_PER_TRANSCRIPT постов делаем до MAX_ATTEMPTS_PER_POST попыток:
  * генерация → mainIdea → embedding → проверка дублей.
- * Первая уникальная попытка принимается. Если все попытки дали дубли —
- * принимаем попытку с минимальной similarity и помечаем isDuplicate = true.
+ * Первая уникальная попытка принимается и проставляется status = SENT.
+ * Если все попытки дали дубли — пост не генерируется (failedPosts++).
  */
 
 import { extractMainIdea } from '../../ai/mainIdeaExtractor';
@@ -15,9 +15,9 @@ import {
 } from '../../repositories/clientTranscriptRepository';
 import {
   createTranscriptPost,
-  markAsDuplicate,
   updateEmbedding,
   updateSimilarity,
+  updateStatus,
 } from '../../repositories/transcriptPostRepository';
 import { withRetry } from '../../shared/utils/retry';
 import type { TranscriptPostData } from '../../shared/types/transcript.types';
@@ -33,9 +33,81 @@ import type {
   ProcessingStats,
 } from './transcriptProcessingService.types';
 
-interface AttemptCandidate {
-  post: TranscriptPostData;
-  similarity: number;
+
+async function generateSinglePost(
+  transcript: { id: string; text: string },
+  usedMainIdeas: string[],
+  postIndex: number,
+  stats: ProcessingStats,
+  errors: string[]
+): Promise<TranscriptPostData | null> {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_POST; attempt++) {
+    stats.totalAttempts++;
+
+    try {
+      const postText = await withRetry(
+        () => generatePostFromTranscript(transcript.text, usedMainIdeas),
+        AI_RETRY_CONFIG
+      );
+
+      const mainIdea = await withRetry(
+        () => extractMainIdea(postText),
+        AI_RETRY_CONFIG
+      );
+
+      const post = await createTranscriptPost({
+        transcriptId: transcript.id,
+        text: postText,
+        mainIdea,
+        attemptNumber: attempt,
+      });
+
+      const dedupResult = await generateAndCheckEmbedding(mainIdea);
+
+      await updateEmbedding(post.id, dedupResult.embedding);
+
+      console.log('[TranscriptProcessing] Attempt', {
+        transcriptId: transcript.id,
+        postIndex,
+        attempt,
+        similarity: Number(dedupResult.maxSimilarity.toFixed(4)),
+        isDuplicate: dedupResult.isDuplicate,
+        source: dedupResult.source,
+      });
+
+      if (!dedupResult.isDuplicate) {
+        // Уникальный пост: проставляем статус SENT
+        await updateStatus(post.id, 'SENT');
+
+        if (dedupResult.maxSimilarity > 0) {
+          await updateSimilarity(post.id, dedupResult.maxSimilarity);
+        }
+
+        const sentPost: TranscriptPostData = {
+          ...post,
+          status: 'SENT',
+          similarity: dedupResult.maxSimilarity,
+        };
+
+        stats.uniquePosts++;
+        return sentPost;
+      }
+
+      // Дубль: пост остаётся REJECTED, переходим к следующей попытке
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`post ${postIndex}, attempt ${attempt}: ${message}`);
+      console.error('[TranscriptProcessing] Attempt failed', {
+        transcriptId: transcript.id,
+        postIndex,
+        attempt,
+        error: message,
+      });
+    }
+  }
+
+  stats.failedPosts++;
+  return null;
 }
 
 export async function processTranscript(
@@ -60,112 +132,31 @@ export async function processTranscript(
   const postsToSend: TranscriptPostData[] = [];
   const usedMainIdeas: string[] = [];
 
-  // отклонённые черновики остаются в БД с embedding'ом — исключаем их из дедупликации
-  const rejectedDraftIds: string[] = [];
-
   for (let postIndex = 1; postIndex <= POSTS_PER_TRANSCRIPT; postIndex++) {
-    let postToSend: TranscriptPostData | null = null;
-    let bestCandidate: AttemptCandidate | null = null;
-
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_POST; attempt++) {
-      stats.totalAttempts++;
-
-      try {
-        const postText = await withRetry(
-          () => generatePostFromTranscript(transcript.text, usedMainIdeas),
-          AI_RETRY_CONFIG
-        );
-
-        const mainIdea = await withRetry(
-          () => extractMainIdea(postText),
-          AI_RETRY_CONFIG
-        );
-
-        const post = await createTranscriptPost({
-          transcriptId,
-          text: postText,
-          mainIdea,
-          attemptNumber: attempt,
-        });
-
-        const dedupResult = await generateAndCheckEmbedding(mainIdea, [
-          ...rejectedDraftIds,
-          post.id,
-        ]);
-
-        await updateEmbedding(post.id, dedupResult.embedding);
-
-        console.log('[TranscriptProcessing] Attempt', {
-          postIndex,
-          attempt,
-          similarity: Number(dedupResult.maxSimilarity.toFixed(4)),
-          isDuplicate: dedupResult.isDuplicate,
-          source: dedupResult.source,
-        });
-
-        if (!dedupResult.isDuplicate) {
-          if (dedupResult.maxSimilarity > 0) {
-            await updateSimilarity(post.id, dedupResult.maxSimilarity);
-          }
-
-          postToSend = { ...post, similarity: dedupResult.maxSimilarity };
-          usedMainIdeas.push(mainIdea);
-          stats.uniquePosts++;
-          break;
-        }
-
-        // дубль: держим попытку с минимальной similarity как fallback
-        if (
-          bestCandidate === null ||
-          dedupResult.maxSimilarity < bestCandidate.similarity
-        ) {
-          bestCandidate = { post, similarity: dedupResult.maxSimilarity };
-        }
-
-        rejectedDraftIds.push(post.id);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        errors.push(`post ${postIndex}, attempt ${attempt}: ${message}`);
-        console.error('[TranscriptProcessing] Attempt failed', {
-          transcriptId,
-          postIndex,
-          attempt,
-          error: message,
-        });
-      }
-    }
-
-    if (postToSend === null && bestCandidate !== null) {
-      postToSend = await markAsDuplicate(
-        bestCandidate.post.id,
-        bestCandidate.similarity
-      );
-
-      // пост уходит пользователю — следующий должен с ним сравниваться
-      const rejectedIndex = rejectedDraftIds.indexOf(bestCandidate.post.id);
-      if (rejectedIndex !== -1) {
-        rejectedDraftIds.splice(rejectedIndex, 1);
-      }
-
-      usedMainIdeas.push(bestCandidate.post.mainIdea);
-      stats.duplicatePosts++;
-    }
+    const postToSend = await generateSinglePost(
+      { id: transcriptId, text: transcript.text },
+      usedMainIdeas,
+      postIndex,
+      stats,
+      errors
+    );
 
     if (postToSend === null) {
-      stats.failedPosts++;
       console.error('[TranscriptProcessing] Post generation failed', {
         transcriptId,
         postIndex,
+        message: 'All attempts resulted in duplicates or errors',
       });
       continue;
     }
 
     postsToSend.push(postToSend);
+    usedMainIdeas.push(postToSend.mainIdea);
 
     console.log('[TranscriptProcessing] Post generated', {
       postIndex,
       postId: postToSend.id,
-      isDuplicate: postToSend.isDuplicate,
+      isDuplicate: false,
       similarity: postToSend.similarity,
       finalAttempt: postToSend.attemptNumber,
     });
@@ -185,8 +176,97 @@ export async function processTranscript(
 
   return {
     transcriptId,
+    requestedPosts: POSTS_PER_TRANSCRIPT,
     posts: postsToSend,
     stats,
     errors,
   };
+}
+
+
+export async function generateAdditionalPost(
+  transcriptId: string
+): Promise<{
+  success: boolean;
+  post?: TranscriptPostData;
+  reason?: 'no_unique_topics' | 'error';
+  error?: string;
+}> {
+  console.log('[TranscriptProcessing] Generating additional post', {
+    transcriptId,
+  });
+
+  try {
+    const transcript = await getTranscriptById(transcriptId);
+
+    if (!transcript) {
+      return {
+        success: false,
+        reason: 'error',
+        error: 'Транскрипция не найдена',
+      };
+    }
+
+    // Импортируем getSentPosts из репозитория
+    const { getSentPosts } = await import('../../repositories/transcriptPostRepository');
+    const sentPosts = await getSentPosts(transcriptId);
+    const usedMainIdeas = sentPosts.map((p) => p.mainIdea);
+
+    console.log('[TranscriptProcessing] Found sent posts', {
+      transcriptId,
+      sentPostsCount: sentPosts.length,
+      usedMainIdeas: usedMainIdeas.length,
+    });
+
+    const stats: ProcessingStats = {
+      totalAttempts: 0,
+      uniquePosts: 0,
+      duplicatePosts: 0,
+      failedPosts: 0,
+    };
+    const errors: string[] = [];
+
+    const post = await generateSinglePost(
+      { id: transcriptId, text: transcript.text },
+      usedMainIdeas,
+      sentPosts.length + 1,
+      stats,
+      errors
+    );
+
+    if (post === null) {
+      console.log('[TranscriptProcessing] No unique topics found', {
+        transcriptId,
+        totalAttempts: stats.totalAttempts,
+      });
+
+      return {
+        success: false,
+        reason: 'no_unique_topics',
+      };
+    }
+
+    console.log('[TranscriptProcessing] Additional post generated', {
+      transcriptId,
+      postId: post.id,
+      totalAttempts: stats.totalAttempts,
+    });
+
+    return {
+      success: true,
+      post,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[TranscriptProcessing] Additional post generation failed', {
+      transcriptId,
+      error: message,
+    });
+
+    return {
+      success: false,
+      reason: 'error',
+      error: message,
+    };
+  }
 }

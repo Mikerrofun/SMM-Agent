@@ -2,12 +2,16 @@
  * Telegram-команда /transcript_post — генерация постов из транскрипции встречи.
  *
  * Флоу: /transcript_post → юзер отправляет PDF → парсинг → ClientTranscript →
- * processTranscript() → 2 поста в чат.
+ * processTranscript() → 2 поста в чат + кнопка "Найти ещё пост".
  */
 
 import type { Context } from 'grammy';
+import { InlineKeyboard } from 'grammy';
 import { createTranscript } from '../../repositories/clientTranscriptRepository';
-import { processTranscript } from '../../services/transcript/transcriptProcessingService';
+import {
+  processTranscript,
+  generateAdditionalPost,
+} from '../../services/transcript/transcriptProcessingService';
 import { extractTextFromPdf } from '../../shared/utils/pdfParser';
 import { PdfParserError } from '../../shared/utils/pdfParser.errors';
 import { sleep } from '../../shared/utils/sleep';
@@ -19,6 +23,8 @@ import {
 } from './transcriptPost.config';
 
 const waitingForPdf = new Map<number, boolean>();
+
+const CALLBACK_PREFIX = 'transcript_more:';
 
 export async function handleTranscriptCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -131,7 +137,7 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
       return;
     }
 
-    await sendTranscriptPosts(ctx, result.posts);
+    await sendTranscriptPosts(ctx, result.posts, transcript.id);
   } catch (error) {
     console.error('[TranscriptPost] Processing failed', {
       userId,
@@ -159,23 +165,35 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
   }
 }
 
+/**
+ * Отправляет один пост в чат.
+ */
+async function sendSinglePost(
+  ctx: Context,
+  post: TranscriptPostData,
+  postNumber: number
+): Promise<void> {
+  try {
+    await ctx.reply(`✅ *Пост ${postNumber}*\n\n${escapeMarkdown(post.text)}`, {
+      parse_mode: 'Markdown',
+    });
+  } catch (error) {
+    console.error(`[TranscriptPost] Failed to send post ${post.id}:`, error);
+    throw error;
+  }
+}
 
 export async function sendTranscriptPosts(
   ctx: Context,
-  posts: TranscriptPostData[]
+  posts: TranscriptPostData[],
+  transcriptId: string
 ): Promise<void> {
   for (let i = 0; i < posts.length; i++) {
     const post = posts[i];
     const number = i + 1;
 
-    const prefix = post.isDuplicate
-      ? `⚠️ *Пост ${number}* (похож на существующий, similarity: ${formatSimilarity(post.similarity)})\n\n`
-      : `✅ *Пост ${number}*\n\n`;
-
     try {
-      await ctx.reply(`${prefix}${escapeMarkdown(post.text)}`, {
-        parse_mode: 'Markdown',
-      });
+      await sendSinglePost(ctx, post, number);
     } catch (error) {
       console.error(`[TranscriptPost] Failed to send post ${post.id}:`, error);
     }
@@ -185,27 +203,110 @@ export async function sendTranscriptPosts(
     }
   }
 
-  const duplicates = posts.filter((post) => post.isDuplicate).length;
+  const summary = `✅ Готово! Сгенерировано ${posts.length} ${pluralizePost(posts.length)} из транскрипции.`;
 
-  let summary: string;
+  if (posts.length > 0) {
+    const keyboard = new InlineKeyboard().text(
+      '📝 Найти ещё пост',
+      `${CALLBACK_PREFIX}${transcriptId}`
+    );
 
-  if (duplicates === 0) {
-    summary = `✅ Готово! Сгенерировано ${posts.length} ${pluralizePost(posts.length)} из транскрипции.`;
-  } else if (duplicates < posts.length) {
-    summary =
-      `⚠️ Сгенерировано ${posts.length} ${pluralizePost(posts.length)}, но ${duplicates} похож на существующие.\n` +
-      'Возможно, эта тема уже частично раскрыта.';
+    await ctx.reply(summary, { reply_markup: keyboard });
   } else {
-    summary =
-      '⚠️ Все посты похожи на существующие (similarity > 0.75).\n' +
-      'Вероятно, инсайты из этой встречи уже использовались в контенте.';
+    await ctx.reply(summary);
   }
-
-  await ctx.reply(summary);
 }
 
-function formatSimilarity(similarity?: number | null): string {
-  return typeof similarity === 'number' ? similarity.toFixed(2) : 'n/a';
+
+export async function handleTranscriptMoreCallback(
+  ctx: Context
+): Promise<void> {
+  try {
+    const callbackData = ctx.callbackQuery?.data;
+
+    if (!callbackData || !callbackData.startsWith(CALLBACK_PREFIX)) {
+      await ctx.answerCallbackQuery({
+        text: '❌ Неверные данные',
+      });
+      return;
+    }
+
+    const transcriptId = callbackData.replace(CALLBACK_PREFIX, '');
+
+    await ctx.answerCallbackQuery({
+      text: '⏳ Ищу уникальную тему...',
+    });
+
+    try {
+      await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+    } catch (error) {
+      console.error('[TranscriptPost] Failed to remove keyboard:', error);
+    }
+
+    const statusMessage = await ctx.reply('⏳ Ищу уникальную тему в транскрипции...');
+
+    const result = await generateAdditionalPost(transcriptId);
+
+    try {
+      await ctx.api.deleteMessage(ctx.chat!.id, statusMessage.message_id);
+    } catch (deleteError) {
+      console.error('[TranscriptPost] Failed to delete status message:', deleteError);
+    }
+
+    if (!result.success) {
+      if (result.reason === 'no_unique_topics') {
+        await ctx.reply(
+          '💭 Больше уникальных тем в этой встрече не найдено.\n\n' +
+            'Все инсайты из транскрипции уже использованы.'
+        );
+      } else {
+        const keyboard = new InlineKeyboard().text(
+          '📝 Найти ещё пост',
+          `${CALLBACK_PREFIX}${transcriptId}`
+        );
+
+        await ctx.reply(
+          `❌ Произошла ошибка: ${result.error ?? 'Неизвестная ошибка'}\n\n` +
+            'Попробуй ещё раз.',
+          { reply_markup: keyboard }
+        );
+      }
+      return;
+    }
+
+    const sentPosts = await import('../../repositories/transcriptPostRepository')
+      .then((m) => m.getSentPosts(transcriptId));
+    const postNumber = sentPosts.length;
+
+    await sendSinglePost(ctx, result.post!, postNumber);
+
+    const keyboard = new InlineKeyboard().text(
+      '📝 Найти ещё пост',
+      `${CALLBACK_PREFIX}${transcriptId}`
+    );
+
+    await ctx.reply(
+      `✅ Найден ещё один пост из этой встречи!`,
+      { reply_markup: keyboard }
+    );
+
+    console.log('[TranscriptPost] Additional post sent', {
+      transcriptId,
+      postId: result.post!.id,
+    });
+  } catch (error) {
+    console.error('[TranscriptPost] Callback handler failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    try {
+      await ctx.reply(
+        '❌ Произошла ошибка при генерации поста. Попробуй позже.'
+      );
+    } catch (replyError) {
+      console.error('[TranscriptPost] Failed to send error message:', replyError);
+    }
+  }
 }
 
 function escapeMarkdown(text: string): string {

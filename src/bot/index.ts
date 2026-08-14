@@ -9,6 +9,7 @@ import {
   handleRunPipelineCallback,
   handleTranscriptCommand,
   handlePdfDocument,
+  handleTranscriptMoreCallback,
 } from "./commands";
 
 if (typeof window === "undefined") {
@@ -65,6 +66,7 @@ bot.command("status", async (ctx) => {
 bot.callbackQuery(/^generate_post:/, handleGeneratePostCallback);
 bot.callbackQuery(/^regenerate_post:/, handleRegeneratePostCallback);
 bot.callbackQuery("run_pipeline", handleRunPipelineCallback);
+bot.callbackQuery(/^transcript_more:/, handleTranscriptMoreCallback);
 
 bot.catch((error) => {
   const err = error.error;

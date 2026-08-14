@@ -61,42 +61,55 @@ export async function updateSimilarity(
   });
 }
 
+
+export async function updateStatus(
+  id: string,
+  status: 'SENT' | 'REJECTED'
+): Promise<void> {
+  await prisma.transcriptPost.update({
+    where: { id },
+    data: { status },
+  });
+}
+
+
+export async function getSentPosts(
+  transcriptId: string
+): Promise<TranscriptPostData[]> {
+  return prisma.transcriptPost.findMany({
+    where: {
+      transcriptId,
+      status: 'SENT',
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
 /**
  * Находит похожие TranscriptPost через cosine similarity (pgvector).
  *
+ * Проверяет только посты со статусом SENT — черновики (REJECTED) не участвуют в дедупликации.
+ *
  * @param embedding — вектор для сравнения
  * @param threshold — минимальная similarity (0 — вернуть всё)
- * @param excludeIds — id постов, которые надо исключить (например, черновики текущей попытки)
  * @returns совпадения, отсортированные по similarity DESC
  */
 export async function findSimilarPosts(
   embedding: number[],
-  threshold: number,
-  excludeIds: string[] = []
+  threshold: number
 ): Promise<SimilarityMatch[]> {
   const vectorLiteral = `[${embedding.join(',')}]`;
 
-  const rows =
-    excludeIds.length > 0
-      ? await prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
-          SELECT
-            id,
-            (1 - (embedding <=> ${vectorLiteral}::vector)) AS similarity
-          FROM "TranscriptPost"
-          WHERE embedding IS NOT NULL
-            AND id != ALL(${excludeIds}::text[])
-            AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
-          ORDER BY similarity DESC
-        `
-      : await prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
-          SELECT
-            id,
-            (1 - (embedding <=> ${vectorLiteral}::vector)) AS similarity
-          FROM "TranscriptPost"
-          WHERE embedding IS NOT NULL
-            AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
-          ORDER BY similarity DESC
-        `;
+  const rows = await prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
+    SELECT
+      id,
+      (1 - (embedding <=> ${vectorLiteral}::vector)) AS similarity
+    FROM "TranscriptPost"
+    WHERE embedding IS NOT NULL
+      AND status = 'SENT'
+      AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
+    ORDER BY similarity DESC
+  `;
 
   return rows.map((row) => ({
     id: row.id,

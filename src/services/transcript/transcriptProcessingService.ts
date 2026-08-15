@@ -18,6 +18,7 @@ import {
   updateEmbedding,
   updateSimilarity,
   updateStatus,
+  getSentPosts,
 } from '../../repositories/transcriptPostRepository';
 import { withRetry } from '../../shared/utils/retry';
 import type { TranscriptPostData } from '../../shared/types/transcript.types';
@@ -207,8 +208,6 @@ export async function generateAdditionalPost(
       };
     }
 
-    // Импортируем getSentPosts из репозитория
-    const { getSentPosts } = await import('../../repositories/transcriptPostRepository');
     const sentPosts = await getSentPosts(transcriptId);
     const usedMainIdeas = sentPosts.map((p) => p.mainIdea);
 

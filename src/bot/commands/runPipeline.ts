@@ -48,11 +48,11 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
     const result = await Promise.race([pipelinePromise, timeoutPromise]);
     const duration = Math.round((Date.now() - startTime) / 1000);
 
-    let finalMessage = "✅ *Пайплайн успешно завершен!*\n\n";
-    finalMessage += "📊 *Статистика:*\n";
+    let finalMessage = "✅ <b>Пайплайн успешно завершен!</b>\n\n";
+    finalMessage += "📊 <b>Статистика:</b>\n";
     finalMessage += "━━━━━━━━━━━━━━━━━━━━━━\n\n";
 
-    finalMessage += `📡 *Парсинг каналов:*\n`;
+    finalMessage += `📡 <b>Парсинг каналов:</b>\n`;
     finalMessage += `   • Обработано каналов: ${result.parsing.totalChannels}\n`;
     finalMessage += `   • Успешно: ${result.parsing.successfulChannels}\n`;
     finalMessage += `   • Новых постов: ${result.parsing.savedPosts}\n`;
@@ -61,7 +61,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
     }
     finalMessage += "\n";
 
-    finalMessage += `💡 *Генерация идей:*\n`;
+    finalMessage += `💡 <b>Генерация идей:</b>\n`;
     finalMessage += `   • Обработано постов: ${result.ideas.total}\n`;
     finalMessage += `   • Создано идей: ${result.ideas.succeeded}\n`;
     if (result.ideas.failed > 0) {
@@ -69,7 +69,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
     }
     finalMessage += "\n";
 
-    finalMessage += `🔍 *Дедупликация:*\n`;
+    finalMessage += `🔍 <b>Дедупликация:</b>\n`;
     finalMessage += `   • Проверено идей: ${result.deduplication.total}\n`;
     finalMessage += `   • Уникальных: ${result.deduplication.unique}\n`;
     if (result.deduplication.duplicates > 0) {
@@ -92,7 +92,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
         statusMessage.chat.id,
         statusMessage.message_id,
         finalMessage,
-        { parse_mode: "Markdown" }
+        { parse_mode: "HTML" }
       );
     }
 
@@ -107,7 +107,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
         : errorMessage;
 
       const errorMsg = 
-        "❌ *Ошибка выполнения пайплайна*\n\n" +
+        "❌ <b>Ошибка выполнения пайплайна</b>\n\n" +
         shortError + "\n\n" +
         "Проверьте логи для подробностей.";
 

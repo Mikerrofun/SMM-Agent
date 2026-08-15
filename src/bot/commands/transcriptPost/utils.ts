@@ -1,6 +1,6 @@
-export function escapeMarkdown(text: string): string {
-  return text.replace(/([_*[\]()~`>#+|{}])/g, '\\$1');
-}
+/**
+ * Утилиты для работы с транскрипт-постами.
+ */
 
 export function pluralizePost(count: number): string {
   const lastDigit = count % 10;

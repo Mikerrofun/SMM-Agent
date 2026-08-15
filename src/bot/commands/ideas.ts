@@ -2,6 +2,7 @@ import type { Context } from "grammy";
 import { InlineKeyboard } from "grammy";
 import { getNewIdeasForSending, markIdeasAsSent } from "../../repositories/ideaRepository";
 import { generatePostForIdea } from "../../services/post/postGenerationService";
+import { escapeHtml } from "../utils";
 
 export async function handleIdeasCommand(ctx: Context): Promise<void> {
   try {
@@ -31,11 +32,11 @@ export async function handleIdeasCommand(ctx: Context): Promise<void> {
         );
 
         await ctx.reply(
-          `💡 *${escapeMarkdown(idea.title)}*\n\n` +
-          `📝 *Идея:*\n${escapeMarkdown(idea.mainIdea)}\n\n` +
-          `🎯 *Цель:*\n${escapeMarkdown(idea.goal)}`,
+          `💡 <b>${escapeHtml(idea.title)}</b>\n\n` +
+          `📝 <b>Идея:</b>\n${escapeHtml(idea.mainIdea)}\n\n` +
+          `🎯 <b>Цель:</b>\n${escapeHtml(idea.goal)}`,
           {
-            parse_mode: "Markdown",
+            parse_mode: "HTML",
             reply_markup: keyboard,
           }
         );
@@ -110,10 +111,10 @@ export async function handleGeneratePostCallback(ctx: Context): Promise<void> {
 
     if (!result.success) {
       await ctx.reply(
-        `❌ *Не удалось сгенерировать пост*\n\n` +
-        `Ошибка: ${escapeMarkdown(result.error)}\n\n` +
+        `❌ <b>Не удалось сгенерировать пост</b>\n\n` +
+        `Ошибка: ${escapeHtml(result.error)}\n\n` +
         `Попробуйте ещё раз через кнопку "✍️ Сгенерировать пост"`,
-        { parse_mode: "Markdown" }
+        { parse_mode: "HTML" }
       );
       return;
     }
@@ -124,9 +125,9 @@ export async function handleGeneratePostCallback(ctx: Context): Promise<void> {
     );
 
     await ctx.reply(
-      `✅ *Сгенерированный пост:*\n\n${escapeMarkdown(result.postText)}`,
+      `✅ <b>Сгенерированный пост:</b>\n\n${result.postText}`,
       {
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
         reply_markup: keyboard,
         ...(messageId && { reply_to_message_id: messageId }),
       }
@@ -143,10 +144,10 @@ export async function handleGeneratePostCallback(ctx: Context): Promise<void> {
 
     try {
       await ctx.reply(
-        `❌ *Произошла ошибка при генерации поста*\n\n` +
-        `${escapeMarkdown(errorMessage)}\n\n` +
+        `❌ <b>Произошла ошибка при генерации поста</b>\n\n` +
+        `${escapeHtml(errorMessage)}\n\n` +
         `Попробуйте ещё раз или обратитесь к администратору.`,
-        { parse_mode: "Markdown" }
+        { parse_mode: "HTML" }
       );
     } catch (replyError) {
       console.error("Failed to send error message:", replyError);
@@ -182,10 +183,6 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
       console.error("Failed to answer callback query:", replyError);
     }
   }
-}
-
-function escapeMarkdown(text: string): string {
-  return text.replace(/([_*[\]()~`>#+|{}])/g, "\\$1");
 }
 
 function pluralizeIdea(count: number): string {

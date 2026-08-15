@@ -7,7 +7,7 @@ import { InlineKeyboard } from 'grammy';
 import { sleep } from '../../../shared/utils/sleep';
 import type { TranscriptPostData } from '../../../shared/types/transcript.types';
 import { CALLBACK_PREFIX, DELAY_BETWEEN_POSTS_MS } from './config';
-import { escapeMarkdown, pluralizePost } from './utils';
+import { pluralizePost } from './utils';
 
 
 export async function sendSinglePost(
@@ -16,8 +16,8 @@ export async function sendSinglePost(
   postNumber: number
 ): Promise<void> {
   try {
-    await ctx.reply(`✅ *Пост ${postNumber}*\n\n${escapeMarkdown(post.text)}`, {
-      parse_mode: 'Markdown',
+    await ctx.reply(`✅ <b>Пост ${postNumber}</b>\n\n${post.text}`, {
+      parse_mode: 'HTML',
     });
   } catch (error) {
     console.error(`[TranscriptPost] Failed to send post ${post.id}:`, error);

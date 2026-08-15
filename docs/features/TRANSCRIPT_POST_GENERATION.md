@@ -1,11 +1,659 @@
----
-
-**Дата:** 14.08.2026  
-**Теги:** #features #transcript-post #pdf #pgvector #openai #telegram-bot
+# Генерация постов из транскрипций встреч с клиентами
 
 ---
 
-## 1. Зачем
+**Дата:** 15.08.2026  
+**Теги:** #features #transcript-post #data-flow #architecture
+
+---
+
+## Что делает фича
+
+Превращает PDF-транскрипцию встречи с клиентом в 2 готовых поста для Telegram-канала Натальи, которые:
+- **Не повторяют** уже опубликованные посты Натальи
+- **Не повторяют** друг друга
+- **Не повторяют** посты из других транскрипций
+
+**Флоу пользователя:**
+```
+/transcript_post → загрузка PDF → 30-60 секунд ожидания → 2 поста в чат + кнопка "Найти ещё пост"
+```
+
+Кнопка позволяет получать дополнительные посты из той же встречи бесконечно, пока есть уникальные темы.
+
+---
+
+## Как текут данные
+
+### 1. От команды до PDF
+
+```
+Юзер печатает: /transcript_post
+      ↓
+handleTranscriptCommand(ctx)
+  - ctx.from.id → userId
+  - waitingForPdf.set(userId, true)  ← включаем "ждём PDF от этого юзера"
+  - reply("📄 Отправь PDF...")
+      ↓
+Юзер загружает документ
+      ↓
+bot.on("message:document")
+  - waitingForPdf.get(userId)? 
+      нет → return (игнорируем чужие документы)
+      да → идём дальше
+      ↓
+handlePdfDocument(ctx)
+```
+
+**Зачем `waitingForPdf`:**  
+Без него бот реагировал бы на **любой** документ в чате. Map хранит `userId → true`, пока пользователь не пришлёт файл (или не случится ошибка). После обработки `waitingForPdf.delete(userId)` в `finally` — состояние сбрасывается всегда.
+
+---
+
+### 2. От документа до текста
+
+```
+handlePdfDocument(ctx)
+  ↓
+Валидация:
+  - mime_type === 'application/pdf'? нет → reply("❌ Файл должен быть в формате PDF")
+  - file_size <= 10MB? нет → reply("❌ Файл слишком большой")
+      ↓
+Скачивание:
+  - ctx.api.getFile(file_id) → file_path
+  - fetch(`https://api.telegram.org/file/bot${token}/${file_path}`)
+  - Buffer.from(await response.arrayBuffer())
+      ↓
+extractTextFromPdf(buffer)
+  ↓
+  new PDFParse({ data: Uint8Array(buffer) })
+    - getText() → rawText
+    - normalizePdfText(rawText):
+        1. \u00A0 → пробел
+        2. \r\n → \n
+        3. множественные пробелы/табы → один пробел
+        4. пробелы вокруг \n → убрать
+        5. 3+ переноса → 2 переноса
+        6. trim()
+    - length === 0? → EmptyPdfError("PDF не содержит текста")
+    - length < 100? → InsufficientContentError("Слишком мало текста в PDF")
+    - parser.destroy() в finally (освобождаем worker, иначе утечка памяти)
+  ↓
+text: string (нормализованный текст транскрипции)
+```
+
+**Почему `parser.destroy()` критичен:**  
+pdf-parse v2 создаёт worker на каждый файл. Без явного освобождения worker остаётся в памяти навсегда. После 10 файлов — 10 зависших worker'ов.
+
+---
+
+### 3. От текста до постов (ядро системы)
+
+```
+createTranscript({ text, fileName })
+  - INSERT INTO ClientTranscript → transcriptId
+  - текст сохранён в БД, дальше работаем с id
+      ↓
+ctx.reply("⏳ Генерирую посты...") → statusMessageId
+      ↓
+processTranscript(transcriptId)  ← ядро генерации
+```
+
+#### Внутри `processTranscript()` — двойной цикл
+
+**Внешний цикл:** 2 поста (`POSTS_PER_TRANSCRIPT = 2`)  
+**Внутренний цикл:** до 3 попыток на пост (`MAX_ATTEMPTS_PER_POST = 3`)
+
+**Три накопителя живут на весь прогон:**
+
+| Переменная | Что хранит | Зачем |
+|---|---|---|
+| `postsToSend[]` | Посты для отправки юзеру | Результат функции |
+| `usedMainIdeas[]` | Темы уже отправленных постов | Уходят в промпт LLM: "не повторяй эти темы" |
+| `rejectedDraftIds[]` | id отклонённых черновиков | Исключаются из векторного поиска дедупликации |
+
+---
+
+#### Одна попытка генерации (шаг за шагом)
+
+```
+Попытка N для поста M:
+      ↓
+1. generatePostFromTranscript(text, usedMainIdeas)  ← withRetry ×3
+     - prepareTranscriptText(text):
+         length <= 16000? → текст целиком
+         length > 16000? → первые 12000 + последние 4000 символов
+     - loadPrompt("generate-post.md") → systemPrompt
+     - userMessage = <untrusted_source>
+                      ТРАНСКРИПЦИЯ ВСТРЕЧИ С КЛИЕНТОМ:
+                      {preparedText}
+                      
+                      УЖЕ РАСКРЫТЫЕ ТЕМЫ (не повторяй):
+                      - {usedMainIdeas[0]}
+                      - {usedMainIdeas[1]}
+                      ...
+                      
+                      ЗАДАЧА: Извлеки ключевой инсайт, создай пост.
+                     </untrusted_source>
+     - openai.chat.completions.create() → postText
+      ↓
+2. extractMainIdea(postText)  ← withRetry ×3
+     - Второй вызов LLM: "выдели одно предложение — суть поста"
+     - mainIdea: string (например, "Цены и ценность")
+      ↓
+3. createTranscriptPost({ transcriptId, text: postText, mainIdea, attemptNumber: N })
+     - INSERT INTO TranscriptPost
+     - status = REJECTED по умолчанию (безопасное значение)
+     - embedding пока NULL
+     - возвращаем post с id
+      ↓
+4. generateAndCheckEmbedding(mainIdea)  ← withRetry ×3
+     |
+     ├─ createEmbedding(mainIdea)  ← withRetry ×3
+     |    - openai.embeddings.create(model: "text-embedding-3-small")
+     |    - возвращаем number[1536]
+     |
+     └─ checkPostDuplication(embedding)  ← withRetry ×3
+          |
+          Promise.all([
+            findSimilarNataliaPosts(embedding, threshold: 0),
+            findSimilarPosts(embedding, threshold: 0)  ← исключаем rejectedDraftIds
+          ])
+          ↓
+          resolveBestMatch([
+            { source: 'natalia', matches: [...] },
+            { source: 'transcript', matches: [...] }
+          ])
+          ↓
+          { maxSimilarity, source, matchedId }
+          ↓
+          isDuplicate = maxSimilarity >= 0.75
+      ↓
+5. updateEmbedding(post.id, embedding)
+     - UPDATE TranscriptPost SET embedding = '[...]'::vector
+     - теперь пост участвует в векторном поиске
+      ↓
+6. Развилка: уникален или дубль?
+
+   НЕ ДУБЛЬ (maxSimilarity < 0.75):
+     - updateStatus(post.id, 'SENT')  ← пост принят!
+     - updateSimilarity(post.id, maxSimilarity)  ← записываем для статистики
+     - postToSend = post
+     - usedMainIdeas.push(mainIdea)  ← следующий пост НЕ будет про эту тему
+     - stats.uniquePosts++
+     - break  ← выходим из цикла попыток, переходим к следующему посту
+   
+   ДУБЛЬ (maxSimilarity >= 0.75):
+     - bestCandidate = min(similarity)  ← держим наименее похожий из плохих вариантов
+     - rejectedDraftIds.push(post.id)  ← следующая попытка НЕ будет сравниваться с этим
+     - continue  ← следующая попытка
+```
+
+---
+
+#### Что происходит после 3 попыток
+
+**Случай A: нашли уникальный пост**
+```
+postToSend !== null
+  ↓
+postsToSend.push(postToSend)
+  ↓
+Переходим к следующему посту (postIndex++)
+```
+
+**Случай B: все 3 попытки дали дубли**
+```
+postToSend === null && bestCandidate !== null
+  ↓
+Отдаём пост с минимальной similarity (наименее похожий из плохих)
+  ↓
+updateStatus(bestCandidate.post.id, 'SENT')  ← проставляем статус
+updateSimilarity(bestCandidate.post.id, bestCandidate.similarity)
+  ↓
+rejectedDraftIds.splice(indexOf(bestCandidate.post.id), 1)
+  ↑ ВАЖНО: убираем из списка отклонённых, потому что он теперь отправлен
+  ↑ Следующий пост ДОЛЖЕН с ним сравниваться
+  ↓
+usedMainIdeas.push(bestCandidate.post.mainIdea)
+stats.duplicatePosts++
+postsToSend.push(bestCandidate.post)
+```
+
+**Случай C: все 3 попытки упали с ошибками**
+```
+postToSend === null && bestCandidate === null
+  ↓
+stats.failedPosts++
+continue  ← пропускаем этот пост, идём к следующему
+```
+
+---
+
+#### После обоих постов
+
+```
+postsToSend.length > 0?
+  да → markAsProcessed(transcriptId, new Date())
+       UPDATE ClientTranscript SET processedAt = NOW()
+  нет → ничего не делаем
+      ↓
+return {
+  transcriptId,
+  requestedPosts: 2,
+  posts: postsToSend,  ← 0, 1 или 2 поста
+  stats: { totalAttempts, uniquePosts, duplicatePosts, failedPosts },
+  errors: []
+}
+```
+
+---
+
+### 4. Как работает дедупликация
+
+**Два источника сравнения:**
+1. **NataliaPost** — уже опубликованные посты Натальи (ручные)
+2. **TranscriptPost** (status = SENT) — посты из других транскрипций
+
+**Запрос к БД:**
+```sql
+-- Natalia (готовый метод из репозитория)
+SELECT id, (1 - (embedding <=> $embedding::vector)) AS similarity
+FROM "NataliaPost"
+WHERE embedding IS NOT NULL
+  AND (1 - (embedding <=> $embedding::vector)) >= 0
+ORDER BY similarity DESC;
+
+-- Transcript (исключаем черновики)
+SELECT id, (1 - (embedding <=> $embedding::vector)) AS similarity
+FROM "TranscriptPost"
+WHERE embedding IS NOT NULL
+  AND status = 'SENT'  ← только отправленные посты
+  AND (1 - (embedding <=> $embedding::vector)) >= 0
+ORDER BY similarity DESC;
+```
+
+**Зачем фильтр `status = 'SENT'`:**  
+Без него новый пост сравнивался бы со **всеми** черновиками прошлых прогонов (status = REJECTED). Чем больше обработано транскрипций, тем больше мусора в выборке → тем выше вероятность ложного дубля.
+
+**Выбор лучшего совпадения:**
+```typescript
+resolveBestMatch([
+  { source: 'natalia', matches: [{ id, similarity: 0.82 }, ...] },
+  { source: 'transcript', matches: [{ id, similarity: 0.79 }, ...] }
+])
+  ↓
+Перебираем источники, берём первый элемент каждого (список уже отсортирован)
+Сравниваем similarity между источниками
+  ↓
+{ maxSimilarity: 0.82, source: 'natalia', matchedId: 'clxyz...' }
+  ↓
+isDuplicate = 0.82 >= 0.75  → true
+```
+
+**Почему `threshold: 0` в запросе:**  
+Нам нужно точное значение максимальной similarity, даже если оно ниже 0.75. Это значение:
+- Записывается в БД (`TranscriptPost.similarity`)
+- Показывается юзеру в сводке
+- Используется для выбора `bestCandidate` (минимальная similarity среди дублей)
+
+---
+
+### 5. От постов до сообщений в Telegram
+
+```
+processTranscript() вернул result
+      ↓
+ctx.api.deleteMessage(statusMessageId)  ← убираем "⏳ Генерирую..."
+      ↓
+result.posts.length === 0?
+  да → reply("❌ Не удалось сгенерировать посты")
+  нет → идём дальше
+      ↓
+finishAndShowButton(ctx, result.posts, transcriptId)
+  ↓
+  Цикл по posts:
+    - sendSinglePost(ctx, post, номер)
+        · escapeMarkdown(post.text)  ← экранируем _, *, [, ] для Markdown
+        · reply("✅ *Пост N*\n\n{text}", parse_mode: 'Markdown')
+    - sleep(500ms)  ← пауза между постами (rate limit Telegram)
+  ↓
+  Сводка:
+    - "✅ Готово! Сгенерировано N {pluralizePost(N)} из транскрипции."
+  ↓
+  Кнопка (если posts.length > 0):
+    - InlineKeyboard: "📝 Найти ещё пост"
+    - callback_data: "transcript_more:{transcriptId}"
+      ↓
+finally:
+  waitingForPdf.delete(userId)  ← всегда, даже при ошибке
+```
+
+---
+
+### 6. Кнопка "Найти ещё пост" (бесконечная цепочка)
+
+```
+Юзер кликает кнопку
+      ↓
+bot.callbackQuery(/^transcript_more:/) → handleTranscriptMoreCallback(ctx)
+      ↓
+1. Парсим transcriptId из callback_data
+      ↓
+2. answerCallbackQuery("⏳ Ищу уникальную тему...")  ← убираем часики у юзера
+      ↓
+3. editMessageReplyMarkup({ reply_markup: undefined })
+      ↑ ВАЖНО: снимаем клавиатуру СРАЗУ
+      ↑ Защита от двойного клика: второй клик попадёт в сообщение без кнопки
+      ↓
+4. reply("⏳ Ищу уникальную тему в транскрипции...") → statusMessageId
+      ↓
+5. generateAdditionalPost(transcriptId)  ← новая функция
+     |
+     ├─ getTranscriptById(transcriptId) → transcript
+     |    null? → return { success: false, error: "Транскрипция не найдена" }
+     |
+     ├─ getSentPosts(transcriptId)
+     |    - SELECT * FROM TranscriptPost WHERE transcriptId = ? AND status = 'SENT'
+     |    - возвращаем ВСЕ отправленные посты (базовые 2 + все из прошлых кликов)
+     |
+     ├─ usedMainIdeas = sentPosts.map(p => p.mainIdea)
+     |    ↑ КЛЮЧЕВОЙ МОМЕНТ: LLM видит историю тем из БД
+     |    ↑ Не повторит ни базовые 2 поста, ни посты из прошлых кликов
+     |
+     └─ generateSinglePost(transcript, usedMainIdeas, postIndex, stats, errors)
+          ↑ ТА ЖЕ функция, что в processTranscript()
+          ↑ Цикл 1..3 попытки, логика идентична
+          ↓
+        Три исхода:
+          A. Уникальный пост найден → return { success: true, post }
+          B. Все 3 попытки дубли → return { success: false, reason: 'no_unique_topics' }
+          C. Ошибка → return { success: false, reason: 'error', error: message }
+      ↓
+6. deleteMessage(statusMessageId)
+      ↓
+7. Развилка по result:
+
+   SUCCESS:
+     - sendSinglePost(ctx, post, postNumber)
+         · postNumber = sentPosts.length (высчитываем из БД, а не из памяти)
+     - reply("✅ Найден ещё один пост!")
+     - InlineKeyboard: "📝 Найти ещё пост"  ← НОВАЯ кнопка, цепочка продолжается
+   
+   NO_UNIQUE_TOPICS:
+     - reply("💭 Больше уникальных тем не найдено. Все инсайты использованы.")
+     - кнопка НЕ возвращается  ← СТОП-МЕХАНИЗМ
+   
+   ERROR:
+     - reply("❌ Произошла ошибка: {message}\n\nПопробуй ещё раз.")
+     - InlineKeyboard: "📝 Найти ещё пост"  ← кнопка возвращается, можно повторить
+```
+
+**Почему цепочка бесконечная:**  
+Нет лимита на количество постов из одной транскрипции. Дедупликация — естественный лимит: когда темы кончатся, система сама скажет "больше нет". Если встреча насыщенная — получишь 5 постов, если скучная — 2.
+
+**Почему `postNumber` из БД, а не из `callback_data`:**  
+`callback_data` в Telegram ограничен 64 байтами. Один cuid ≈ 25 символов, префикс 17 → всего ≈ 42 байта. Два id не влезут. Плюс номер в кнопке устареет после первого же клика — БД всегда актуальна.
+
+---
+
+## Ключевые решения и их причины
+
+### 1. Почему `bestCandidate` (дубль) отдаётся пользователю
+
+**Альтернатива:** 3 дубля → пост не генерируется.
+
+**Проблема:** Юзер получает "❌ ничего не вышло" вместо контента.
+
+**Решение:** Отдаём пост с **минимальной similarity** среди дублей + пометка `⚠️ similarity: 0.79`. Пользователь сам решает, исчерпана ли тема. Это честно и практично.
+
+**Последствие:** Пост с `status = SENT` и `isDuplicate = false` попадает в дедупликацию будущих постов. Но это правильно: если мы его отправили, значит он часть контента.
+
+---
+
+### 2. Почему `rejectedDraftIds` убирают `bestCandidate` при отправке
+
+```typescript
+if (postToSend === null && bestCandidate !== null) {
+  postToSend = await markAsDuplicate(bestCandidate.post.id, bestCandidate.similarity);
+  
+  const rejectedIndex = rejectedDraftIds.indexOf(bestCandidate.post.id);
+  if (rejectedIndex !== -1) {
+    rejectedDraftIds.splice(rejectedIndex, 1);  // ← зачем?
+  }
+}
+```
+
+**Без этой строки:**
+1. Пост 1 получил дубль на попытке 3, отправили `bestCandidate` (similarity 0.79)
+2. `bestCandidate.post.id` остался в `rejectedDraftIds`
+3. Пост 2 запускается с `excludeIds = [bestCandidate.post.id, ...]`
+4. Пост 2 **не сравнивается** с постом 1
+5. Пост 2 может быть про ту же тему, что пост 1
+
+**С этой строкой:**
+Пост 1 стал контентом → убираем из списка отклонённых → пост 2 сравнивается с ним → дубль будет пойман.
+
+---
+
+### 3. Почему `usedMainIdeas` в промпте (двухуровневая защита)
+
+**Уровень 1 (до генерации):** Промпт содержит "УЖЕ РАСКРЫТЫЕ ТЕМЫ: - Цены и ценность - Делегирование"  
+**Уровень 2 (после генерации):** Векторная проверка по embedding
+
+**Зачем два уровня:**
+- Промпт снижает вероятность дубля **заранее** → меньше потраченных попыток
+- Вектор ловит дубль **гарантированно**, даже если LLM проигнорировал промпт
+- Второй пост обычно проходит с первой попытки благодаря промпту
+
+---
+
+### 4. Почему транскрипция обрезается "начало + конец", а не "первые N символов"
+
+**Структура встречи:**
+- Начало: знакомство, постановка проблемы клиента
+- Середина: детали, обсуждение, вопросы
+- Конец: выводы, договорённости, итоги
+
+**Обрезка сверху (первые 16000):** выкидывает самое ценное — итоги.  
+**Обрезка "12000 + 4000":** сохраняет проблему и решение, жертвует серединой.
+
+**Ограничение:** Середина длинной встречи не попадает в модель ни на одной попытке. Для решения нужно чанкование + суммаризация → оставлено на будущее.
+
+---
+
+### 5. Почему черновики пишутся в БД до проверки на дубль
+
+**Альтернатива:** Держать попытки в памяти, сохранять только победителя.
+
+**Проблема:** Исчезает статистика. С какой попытки получился пост? Сколько дублей отбраковано? Какие темы модель предлагает повторно?
+
+**Решение:** Записываем **все** попытки с `attemptNumber`, `isDuplicate`, `similarity`. Цена: 6 лишних INSERT'ов на прогон (2 поста × 3 попытки, из которых 2 — черновики). Выгода: полная трассируемость.
+
+---
+
+### 6. Почему статус `REJECTED` по умолчанию, а не `SENT`
+
+**Если бы `SENT` было по умолчанию:**
+```typescript
+const post = await createTranscriptPost({ ... });  // status = SENT
+
+// ... генерация упала до проверки ...
+
+// Пост остался в БД как SENT, но не прошёл дедупликацию
+// Будущие посты сравниваются с мусором
+```
+
+**С `REJECTED` по умолчанию:**
+```typescript
+const post = await createTranscriptPost({ ... });  // status = REJECTED
+
+// ... генерация упала ...
+
+// Пост в БД как REJECTED → не участвует в дедупликации
+// Мусор изолирован
+```
+
+Пост "поднимается" до `SENT` только после успешной проверки. Забытый апдейт даст недостающий пост (плохо), а не мусор в дедупликации (катастрофа).
+
+---
+
+## Точки расширения
+
+**Что легко добавить:**
+1. **Регенерация поста** — кнопка 🔄 под каждым постом (аналог `regenerate_post` для идей)
+2. **Удаление поста** — кнопка 🗑 + `UPDATE status = DELETED`, исключать из дедупликации
+3. **Batch-обработка** — `/transcript_batch` → загрузить несколько PDF → прогнать все подряд
+4. **План тем от LLM** — на старте спросить "сколько инсайтов в транскрипции", остановиться раньше
+5. **Чанкование длинных встреч** — разбить на куски, суммаризировать, склеить для промпта
+
+**Что требует изменений архитектуры:**
+1. **Редактирование отправленного поста** — нужна связь `TranscriptPost ↔ Telegram message_id`
+2. **Предпросмотр до отправки** — нужен промежуточный статус `PENDING_APPROVAL`
+3. **Выбор тем вручную** — UI для показа всех mainIdea до генерации
+
+---
+
+## Диаграмма потока данных (упрощённая)
+
+```
+┌─────────────────────┐
+│ Юзер: /transcript   │
+│ + PDF файл          │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ extractTextFromPdf  │──► Ошибка PDF → ❌ reply
+└──────────┬──────────┘
+           │ text
+           ▼
+┌─────────────────────┐
+│ createTranscript    │──► INSERT ClientTranscript
+└──────────┬──────────┘
+           │ transcriptId
+           ▼
+┌─────────────────────────────────────────────┐
+│ processTranscript (2 поста × 3 попытки)     │
+│                                             │
+│  ┌────────────────────────────────────┐    │
+│  │ Попытка N:                         │    │
+│  │  1. generatePostFromTranscript     │◄───┼─── usedMainIdeas
+│  │     (LLM + промпт с темами)        │    │
+│  │  2. extractMainIdea (LLM)          │    │
+│  │  3. createTranscriptPost (INSERT)  │    │
+│  │  4. createEmbedding (LLM)          │    │
+│  │  5. checkPostDuplication:          │    │
+│  │       - findSimilarNataliaPosts    │    │
+│  │       - findSimilarPosts           │◄───┼─── excludeIds
+│  │       - resolveBestMatch           │    │
+│  │  6. isDuplicate?                   │    │
+│  │       нет → updateStatus(SENT)     │────┼──► postsToSend.push()
+│  │             usedMainIdeas.push()   │    │    usedMainIdeas.push()
+│  │       да  → rejectedDraftIds.push()│    │
+│  │             следующая попытка      │    │
+│  └────────────────────────────────────┘    │
+│                                             │
+│  3 дубля → bestCandidate (min similarity)  │
+│            updateStatus(SENT)              │──► postsToSend.push()
+│            rejectedDraftIds.splice()       │
+└──────────────┬──────────────────────────────┘
+               │ posts[]
+               ▼
+┌─────────────────────┐
+│ finishAndShowButton │
+│  - sendSinglePost   │──► reply в Telegram
+│  - сводка           │
+│  - кнопка           │──► InlineKeyboard("transcript_more:{transcriptId}")
+└─────────────────────┘
+```
+
+---
+
+## Кнопка "Найти ещё пост" — бесконечная цепочка
+
+```
+┌─────────────────────┐
+│ Клик на кнопку      │
+└──────────┬──────────┘
+           │ transcriptId из callback_data
+           ▼
+┌────────────────────────────────────┐
+│ handleTranscriptMoreCallback       │
+│  1. answerCallbackQuery            │
+│  2. editMessageReplyMarkup(none)   │◄─── защита от двойного клика
+└──────────┬─────────────────────────┘
+           │
+           ▼
+┌────────────────────────────────────┐
+│ generateAdditionalPost             │
+│  - getTranscriptById               │
+│  - getSentPosts (ВСЕ SENT из БД)   │──► usedMainIdeas = [...mainIdea]
+│  - generateSinglePost (1..3 попытки│     (включая базовые 2 + прошлые клики)
+└──────────┬─────────────────────────┘
+           │
+           ▼
+      ┌────┴────┐
+      │ Успех?  │
+      └────┬────┘
+           │
+    ┌──────┼──────┐
+    │      │      │
+    да     нет    ошибка
+    │      │      │
+    ▼      ▼      ▼
+ ┌────┐ ┌────┐ ┌────┐
+ │reply│ │reply│ │reply│
+ │+пост│ │"нет"│ │error│
+ │+btn │ │     │ │+btn │
+ └────┘ └────┘ └────┘
+   │             │
+   │             │
+   └──────┬──────┘
+          │
+          ▼
+    Юзер может кликнуть снова
+    (если кнопка вернулась)
+```
+
+**Стоп-механизм:** "Больше тем не найдено" → кнопка не возвращается → цепочка обрывается.
+
+---
+
+## Конфигурация (критичные параметры)
+
+| Параметр | Значение | Что регулирует |
+|---|---|---|
+| `POSTS_PER_TRANSCRIPT` | 2 | Сколько постов генерируется за один прогон |
+| `MAX_ATTEMPTS_PER_POST` | 3 | Сколько попыток на один пост, если дубль |
+| `SIMILARITY_THRESHOLD` | 0.75 | Порог дубля (0..1, чем выше — тем строже) |
+| `TRANSCRIPT_MAX_INPUT_LENGTH` | 16000 | Лимит символов для LLM |
+| `TRANSCRIPT_HEAD_LENGTH` | 12000 | Сколько символов с начала при обрезке |
+| `TRANSCRIPT_TAIL_LENGTH` | 4000 | Сколько символов с конца при обрезке |
+| `AI_RETRY_CONFIG.maxAttempts` | 3 | Ретраи на каждый вызов LLM |
+| `MIN_PDF_TEXT_LENGTH` | 100 | Минимум символов в PDF (иначе ошибка) |
+
+**Худший случай по вызовам LLM:**
+```
+2 поста × 3 попытки × (1 генерация + 1 mainIdea + 1 embedding) × 3 ретрая = 54 запроса
+```
+
+Реально меньше: уникальный пост проходит с первой попытки, ретраи срабатывают только при сбое сети/API.
+
+---
+
+## Преимущества архитектуры
+
+✅ **Переиспользование:** `openai`, `withRetry`, `loadPrompt`, `createEmbedding`, `extractMainIdea`, `findSimilarNataliaPosts` — всё из существующего кода  
+✅ **Двухуровневая защита от дублей:** промпт (до генерации) + вектор (после)  
+✅ **Единый порог 0.75** с флоу генерации идей → поведение предсказуемо  
+✅ **Полная трассируемость:** каждый черновик в БД с `attemptNumber`, `similarity`, `source`  
+✅ **Отказоустойчивость:** `withRetry` на каждом AI-вызове, ошибка попытки не рушит прогон  
+✅ **Чистота БД:** `onDelete: Cascade` → удаление транскрипции чистит её посты  
+✅ **Безопасность:** `<untrusted_source>` в промпте, `status = REJECTED` по умолчанию  
+✅ **Бесконечная генерация:** кнопка позволяет получить 3, 4, 5... N постов из одной встречи  
+✅ **Естественный лимит:** дедупликация сама останавливает, когда темы исчерпаны
+
 
 Раньше единственным источником контента были посты конкурентов: парсер собирал их, `ideaExtractor` вытаскивал идею, `postGenerator` писал пост в стиле Натальи. Но самый ценный материал — не чужие посты, а реальные встречи с клиентами: там живые боли, формулировки и возражения, которых нет ни у одного конкурента.
 

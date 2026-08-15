@@ -15,6 +15,7 @@ export interface TranscriptPostData {
   transcriptId: string;
   text: string;
   mainIdea: string;
+  status: 'SENT' | 'REJECTED';
   isDuplicate: boolean;
   similarity?: number | null;
   attemptNumber: number;

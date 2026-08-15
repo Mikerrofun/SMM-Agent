@@ -25,12 +25,11 @@ import type {
 
 
 export async function checkPostDuplication(
-  embedding: number[],
-  excludePostIds: string[] = []
+  embedding: number[]
 ): Promise<DuplicationResult> {
   const [nataliaMatches, transcriptMatches] = await Promise.all([
     findSimilarNataliaPosts(embedding, 0),
-    findSimilarPosts(embedding, 0, excludePostIds),
+    findSimilarPosts(embedding, 0),
   ]);
 
   const { maxSimilarity, source, matchedId } = resolveBestMatch([
@@ -50,8 +49,7 @@ export async function checkPostDuplication(
 
 
 export async function generateAndCheckEmbedding(
-  mainIdea: string,
-  excludePostIds: string[] = []
+  mainIdea: string
 ): Promise<EmbeddingCheckResult> {
   try {
     const embedding = await withRetry(
@@ -60,7 +58,7 @@ export async function generateAndCheckEmbedding(
     );
 
     const result = await withRetry(
-      () => checkPostDuplication(embedding, excludePostIds),
+      () => checkPostDuplication(embedding),
       DEDUPLICATION_RETRY_CONFIG
     );
 

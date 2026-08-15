@@ -9,6 +9,7 @@ export interface ProcessingStats {
 
 export interface ProcessingResult {
   transcriptId: string;
+  requestedPosts: number;
   posts: TranscriptPostData[];
   stats: ProcessingStats;
   errors: string[];

@@ -6,6 +6,7 @@ import type { Context } from 'grammy';
 import { InlineKeyboard } from 'grammy';
 import { sleep } from '../../../shared/utils/sleep';
 import type { TranscriptPostData } from '../../../shared/types/transcript.types';
+import { POSTS_PER_TRANSCRIPT } from '../../../services/transcript/transcript.config';
 import { CALLBACK_PREFIX, DELAY_BETWEEN_POSTS_MS } from './config';
 import { pluralizePost } from './utils';
 
@@ -47,13 +48,17 @@ export async function finishAndShowButton(
 
   const summary = `✅ Готово! Сгенерировано ${posts.length} ${pluralizePost(posts.length)} из транскрипции.`;
 
-  if (posts.length > 0) {
+  if (posts.length >= POSTS_PER_TRANSCRIPT) {
     const keyboard = new InlineKeyboard().text(
       '📝 Найти ещё пост',
       `${CALLBACK_PREFIX}${transcriptId}`
     );
 
     await ctx.reply(summary, { reply_markup: keyboard });
+  } else if (posts.length > 0) {
+    await ctx.reply(
+      `${summary}\n\n⚠️ Больше постов из этой встречи не найдено`
+    );
   } else {
     await ctx.reply(summary);
   }

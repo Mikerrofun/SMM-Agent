@@ -66,6 +66,7 @@ async function generateSinglePost(
       const dedupResult = await generateAndCheckEmbedding(mainIdea);
 
       await updateEmbedding(post.id, dedupResult.embedding);
+      await updateSimilarity(post.id, dedupResult.maxSimilarity);
 
       console.log('[TranscriptProcessing] Attempt', {
         transcriptId: transcript.id,
@@ -79,10 +80,6 @@ async function generateSinglePost(
       if (!dedupResult.isDuplicate) {
         // Уникальный пост: проставляем статус SENT
         await updateStatus(post.id, 'SENT');
-
-        if (dedupResult.maxSimilarity > 0) {
-          await updateSimilarity(post.id, dedupResult.maxSimilarity);
-        }
 
         const sentPost: TranscriptPostData = {
           ...post,

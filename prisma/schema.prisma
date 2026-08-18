@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Модель данных описана в docs/DataArchitecture.md
-// Векторная часть (pgvector, embeddings) — в docs/Embeddings.md
-
 generator client {
   provider = "prisma-client"
   output   = "../src/db/generated"
@@ -13,9 +7,113 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─────────────────────────────────────────────────────────────
-// Enums
-// ─────────────────────────────────────────────────────────────
+model Competitor {
+  id        String           @id @default(cuid())
+  name      String
+  url       String           @unique
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  posts     CompetitorPost[]
+
+  @@index([isActive])
+}
+
+model CompetitorPost {
+  id              String     @id @default(cuid())
+  competitorId    String
+  telegramPostUrl String     @unique
+  text            String
+  publishedAt     DateTime
+  isProcessed     Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  competitor      Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  idea            Idea?
+
+  @@index([competitorId])
+  @@index([isProcessed])
+  @@index([publishedAt])
+}
+
+model NataliaPost {
+  id              String                 @id @default(cuid())
+  text            String
+  mainIdea        String
+  embedding       Unsupported("vector")?
+  publishedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  telegramPostUrl String                 @unique
+}
+
+model Idea {
+  id               String                 @id @default(cuid())
+  competitorPostId String                 @unique
+  title            String
+  mainIdea         String
+  goal             String
+  embedding        Unsupported("vector")?
+  status           IdeaStatus             @default(NEW)
+  createdAt        DateTime               @default(now())
+  duplicateOfId    String?
+  duplicateOfType  String?
+  similarity       Float?
+  generatedPost    GeneratedPost?
+  competitorPost   CompetitorPost         @relation(fields: [competitorPostId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model GeneratedPost {
+  id        String   @id @default(cuid())
+  ideaId    String   @unique
+  text      String
+  createdAt DateTime @default(now())
+  mainIdea  String?
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+}
+
+model ClientTranscript {
+  id          String           @id @default(cuid())
+  text        String
+  fileName    String?
+  uploadedAt  DateTime         @default(now())
+  processedAt DateTime?
+  posts       TranscriptPost[]
+
+  @@index([uploadedAt])
+}
+
+model TranscriptPost {
+  id            String                 @id @default(cuid())
+  transcriptId  String
+  text          String
+  mainIdea      String
+  embedding     Unsupported("vector")?
+  similarity    Float?
+  isDuplicate   Boolean                @default(false)
+  attemptNumber Int                    @default(1)
+  createdAt     DateTime               @default(now())
+  status        TranscriptPostStatus   @default(REJECTED)
+  transcript    ClientTranscript       @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+
+  @@index([transcriptId])
+  @@index([isDuplicate])
+  @@index([transcriptId, status])
+}
+
+model GenerationRun {
+  id             String    @id @default(cuid())
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  processedPosts Int       @default(0)
+  generatedIdeas Int       @default(0)
+  acceptedIdeas  Int       @default(0)
+  rejectedIdeas  Int       @default(0)
+  openaiRequests Int       @default(0)
+  status         RunStatus @default(RUNNING)
+
+  @@index([status])
+  @@index([startedAt])
+}
 
 enum IdeaStatus {
   NEW
@@ -32,161 +130,6 @@ enum RunStatus {
 }
 
 enum TranscriptPostStatus {
-  REJECTED // Пост не прошёл проверку дедупликации (по умолчанию)
-  SENT     // Пост отправлен пользователю в боте
-}
-
-// ─────────────────────────────────────────────────────────────
-// Competitor — Telegram-каналы конкурентов
-// ─────────────────────────────────────────────────────────────
-
-model Competitor {
-  id        String   @id @default(cuid())
-  name      String
-  url       String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-
-  posts CompetitorPost[]
-
-  @@index([isActive])
-}
-
-// ─────────────────────────────────────────────────────────────
-// CompetitorPost — оригинальные посты конкурентов
-// Основной источник для генерации идей.
-// ─────────────────────────────────────────────────────────────
-
-model CompetitorPost {
-  id              String   @id @default(cuid())
-  competitorId    String
-  telegramPostUrl String   @unique
-  text            String
-  publishedAt     DateTime
-  isProcessed     Boolean  @default(false)
-  createdAt       DateTime @default(now())
-
-  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
-  idea       Idea?
-
-  @@index([competitorId])
-  @@index([isProcessed])
-  @@index([publishedAt])
-}
-
-// ─────────────────────────────────────────────────────────────
-// NataliaPost — база знаний для проверки повторов
-// Используется для дедупликации идей через embedding.
-// ─────────────────────────────────────────────────────────────
-
-model NataliaPost {
-  id          String   @id @default(cuid())
-  text        String
-  mainIdea    String
-  telegramPostUrl String   @unique
-  // pgvector: Prisma хранит как Unsupported, работаем через raw SQL
-  embedding   Unsupported("vector(1536)")?
-  publishedAt DateTime?
-  createdAt   DateTime @default(now())
-}
-
-// ─────────────────────────────────────────────────────────────
-// Idea — идеи, созданные AI из поста конкурента
-// ─────────────────────────────────────────────────────────────
-
-model Idea {
-  id               String   @id @default(cuid())
-  competitorPostId String   @unique
-  title            String
-  mainIdea           String
-  goal             String
-  // pgvector: вектор от title + thesis, для дедупликации. См. Embeddings.md
-  embedding        Unsupported("vector(1536)")?
-  status           IdeaStatus @default(NEW)
-  // Поля для отслеживания дубликатов (заполняются при similarity >= 0.85)
-  duplicateOfType  String? // 'idea' | 'nataliaPost'
-  duplicateOfId    String? // ID оригинальной записи (Idea.id или NataliaPost.id)
-  similarity       Float?  // Значение cosine similarity (0.0 - 1.0)
-  createdAt        DateTime @default(now())
-
-  competitorPost CompetitorPost @relation(fields: [competitorPostId], references: [id], onDelete: Cascade)
-  generatedPost  GeneratedPost?
-
-  @@index([status])
-}
-
-// ─────────────────────────────────────────────────────────────
-// GeneratedPost — готовый пост (черновик) на основе выбранной идеи
-// ─────────────────────────────────────────────────────────────
-
-model GeneratedPost {
-  id        String   @id @default(cuid())
-  ideaId    String   @unique
-  text      String
-  createdAt DateTime @default(now())
-
-  idea Idea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
-}
-
-// ─────────────────────────────────────────────────────────────
-// ClientTranscript — транскрипция встречи с клиентом (из PDF)
-// Источник контента для TranscriptPost.
-// ─────────────────────────────────────────────────────────────
-
-model ClientTranscript {
-  id          String    @id @default(cuid())
-  text        String
-  fileName    String?
-  uploadedAt  DateTime  @default(now())
-  processedAt DateTime?
-
-  posts TranscriptPost[]
-
-  @@index([uploadedAt])
-}
-
-// ─────────────────────────────────────────────────────────────
-// TranscriptPost — пост, сгенерированный из транскрипции
-// Дедуплицируется против NataliaPost и других TranscriptPost.
-// ─────────────────────────────────────────────────────────────
-
-model TranscriptPost {
-  id            String               @id @default(cuid())
-  transcriptId  String
-  text          String
-  mainIdea      String
-  // pgvector: Prisma хранит как Unsupported, работаем через raw SQL
-  embedding     Unsupported("vector(1536)")?
-  // Статус: REJECTED по умолчанию, SENT после прохождения проверки
-  status        TranscriptPostStatus @default(REJECTED)
-  // Поля для отслеживания дубликатов (причина отклонения)
-  similarity    Float?
-  isDuplicate   Boolean              @default(false)
-  attemptNumber Int                  @default(1)
-  createdAt     DateTime             @default(now())
-
-  transcript ClientTranscript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
-
-  @@index([transcriptId])
-  @@index([isDuplicate])
-  @@index([transcriptId, status])
-}
-
-// ─────────────────────────────────────────────────────────────
-// GenerationRun — служебная запись о каждом прогоне генерации
-// ─────────────────────────────────────────────────────────────
-
-model GenerationRun {
-  id             String    @id @default(cuid())
-  startedAt      DateTime  @default(now())
-  finishedAt     DateTime?
-  processedPosts Int       @default(0)
-  generatedIdeas Int       @default(0)
-  acceptedIdeas  Int       @default(0)
-  rejectedIdeas  Int       @default(0)
-  openaiRequests Int       @default(0)
-  status         RunStatus @default(RUNNING)
-
-  @@index([status])
-  @@index([startedAt])
+  REJECTED
+  SENT
 }

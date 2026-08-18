@@ -36,6 +36,7 @@ model GeneratedPost {
   id        String   @id @default(cuid())
   ideaId    String   @unique
   text      String
+  mainIdea  String?  // Добавлено 19.08.2026 — для будущей экстракции главной идеи
   createdAt DateTime @default(now())
   idea Idea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
 }

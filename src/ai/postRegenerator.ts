@@ -1,13 +1,3 @@
-/**
- * AI-модуль для перегенерации постов в стиле Натальи.
- *
- * Переписывает существующий пост, сохраняя основную идею (mainIdea),
- * но меняя стилистику, формулировки и структуру.
- * Может учитывать фидбек пользователя.
- *
- * Retry логика и обработка БД находятся на уровне service.
- */
-
 import { openai, DEFAULT_MODEL } from '../core/lib/openai';
 import { loadPrompt } from '../shared/utils/promptLoader';
 import {
@@ -16,7 +6,6 @@ import {
   REGENERATE_TEMPERATURE,
 } from './postRegenerator.config';
 import type { RegeneratePostInput } from './postRegenerator.types';
-
 
 export async function regeneratePost(input: RegeneratePostInput): Promise<string> {
   const { currentText, mainIdea, feedback } = input;

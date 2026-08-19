@@ -1,5 +1,11 @@
 export type PostType = 'generated' | 'transcript';
 
+export interface WaitingForFeedbackState {
+  postId: string;
+  postType: PostType;
+  originalMessageId: number;
+}
+
 export interface PostRegenerationSuccess {
   success: true;
   postText: string;

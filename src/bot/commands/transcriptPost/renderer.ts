@@ -17,8 +17,13 @@ export async function sendSinglePost(
   postNumber: number
 ): Promise<void> {
   try {
+    const keyboard = new InlineKeyboard()
+      .text('🔄 Перегенерировать', `regenerate_transcript_post:${post.id}`)
+      .text('✏️ С уточнением', `regenerate_transcript_post_feedback:${post.id}`);
+
     await ctx.reply(`✅ <b>Пост ${postNumber}</b>\n\n${post.text}`, {
       parse_mode: 'HTML',
+      reply_markup: keyboard,
     });
   } catch (error) {
     console.error(`[TranscriptPost] Failed to send post ${post.id}:`, error);

@@ -1,17 +1,3 @@
-/**
- * Универсальный сервис для перегенерации постов.
- *
- * Одна функция обрабатывает оба типа постов:
- * - GeneratedPost (из идей) — может потребовать извлечения mainIdea
- * - TranscriptPost (из транскриптов) — mainIdea всегда существует
- *
- * Логика:
- * - Загрузка поста из БД (разные repositories)
- * - Извлечение mainIdea (только для GeneratedPost если нужно)
- * - Вызов AI для перегенерации (с retry)
- * - Обновление поста в БД (разные методы update)
- */
-
 import { regeneratePost } from '../../ai/postRegenerator';
 import { REGENERATE_RETRY_CONFIG } from '../../ai/postRegenerator.config';
 import { extractMainIdea } from '../../ai/mainIdeaExtractor';
@@ -32,8 +18,6 @@ import type {
   PostRegenerationResult,
 } from './postRegenerationService.types';
 
-
-
 export async function regeneratePostUniversal(
   postId: string,
   postType: PostType,
@@ -45,27 +29,26 @@ export async function regeneratePostUniversal(
         ? await getGeneratedPostById(postId)
         : await getTranscriptPostById(postId);
     
-     
     if (!post) {
       throw new Error(
         `${postType === 'generated' ? 'GeneratedPost' : 'TranscriptPost'} with ID ${postId} not found`
       );
     }
+
     let mainIdea = post.mainIdea;
 
     if (postType === 'generated' && !mainIdea) {
-       mainIdea = await withRetry(
-        async () => await extractMainIdea(post.text) ,
-        REGENERATE_RETRY_CONFIG 
-       )
+      mainIdea = await withRetry(
+        async () => await extractMainIdea(post.text),
+        REGENERATE_RETRY_CONFIG
+      );
     }
-    
 
     const newText = await withRetry(
       async () => {
         return await regeneratePost({
           currentText: post.text,
-          mainIdea: mainIdea!, 
+          mainIdea: mainIdea!,
           feedback,
         });
       },
@@ -105,11 +88,6 @@ export async function regeneratePostUniversal(
   }
 }
 
-
-/**
- * Перегенерирует GeneratedPost (пост из идеи).
- * Wrapper вокруг универсальной функции для удобства.
- */
 export async function regenerateGeneratedPost(
   postId: string,
   feedback?: string
@@ -117,11 +95,6 @@ export async function regenerateGeneratedPost(
   return regeneratePostUniversal(postId, 'generated', feedback);
 }
 
-
-/**
- * Перегенерирует TranscriptPost (пост из транскрипции).
- * Wrapper вокруг универсальной функции для удобства.
- */
 export async function regenerateTranscriptPost(
   postId: string,
   feedback?: string

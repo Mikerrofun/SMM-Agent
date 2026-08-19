@@ -100,3 +100,29 @@ export async function deleteGeneratedPostAndResetIdea(
     return true;
   });
 }
+
+
+
+export async function getGeneratedPostById(
+  id: string
+): Promise<GeneratedPostModel | null> {
+  return prisma.generatedPost.findUnique({
+    where: { id },
+  });
+}
+
+
+
+export async function updateGeneratedPostText(
+  id: string,
+  text: string,
+  mainIdea?: string
+): Promise<GeneratedPostModel> {
+  return prisma.generatedPost.update({
+    where: { id },
+    data: {
+      text,
+      ...(mainIdea !== undefined && { mainIdea }),
+    },
+  });
+}

@@ -2,6 +2,7 @@ export interface PostGenerationSuccess {
   success: true;
   postText: string;
   ideaId: string;
+  postId: string;
 }
 
 export interface PostGenerationError {

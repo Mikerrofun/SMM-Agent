@@ -4,12 +4,14 @@ import { resolve } from "path";
 import {
   handleIdeasCommand,
   handleGeneratePostCallback,
-  handleRegeneratePostCallback,
   handleRunPipelineCommand,
   handleRunPipelineCallback,
   handleTranscriptCommand,
   handlePdfDocument,
   handleTranscriptMoreCallback,
+  handleRegeneratePostCallback,
+  handleRegeneratePostFeedbackCallback,
+  handleFeedbackMessage,
 } from "./commands";
 
 if (typeof window === "undefined") {
@@ -64,9 +66,13 @@ bot.command("status", async (ctx) => {
 });
 
 bot.callbackQuery(/^generate_post:/, handleGeneratePostCallback);
-bot.callbackQuery(/^regenerate_post:/, handleRegeneratePostCallback);
+bot.callbackQuery(/^regenerate_(idea|transcript)_post:/, handleRegeneratePostCallback);
+bot.callbackQuery(/^regenerate_(idea|transcript)_post_feedback:/, handleRegeneratePostFeedbackCallback);
 bot.callbackQuery("run_pipeline", handleRunPipelineCallback);
 bot.callbackQuery(/^transcript_more:/, handleTranscriptMoreCallback);
+
+// ВАЖНО: handler для фидбека должен быть последним, чтобы не перехватывать команды
+bot.on("message:text", handleFeedbackMessage);
 
 bot.catch((error) => {
   const err = error.error;

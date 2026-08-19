@@ -119,10 +119,9 @@ export async function handleGeneratePostCallback(ctx: Context): Promise<void> {
       return;
     }
 
-    const keyboard = new InlineKeyboard().text(
-      "🔄 Перегенерировать",
-      `regenerate_post:${ideaId}`
-    );
+    const keyboard = new InlineKeyboard()
+      .text("🔄 Перегенерировать", `regenerate_idea_post:${result.postId}`)
+      .text("✏️ С уточнением", `regenerate_idea_post_feedback:${result.postId}`);
 
     await ctx.reply(
       `✅ <b>Сгенерированный пост:</b>\n\n${result.postText}`,
@@ -151,36 +150,6 @@ export async function handleGeneratePostCallback(ctx: Context): Promise<void> {
       );
     } catch (replyError) {
       console.error("Failed to send error message:", replyError);
-    }
-  }
-}
-
-export async function handleRegeneratePostCallback(ctx: Context): Promise<void> {
-  try {
-    const callbackData = ctx.callbackQuery?.data;
-    
-    if (!callbackData || !callbackData.startsWith("regenerate_post:")) {
-      await ctx.answerCallbackQuery({
-        text: "❌ Неверные данные",
-      });
-      return;
-    }
-
-    // Заглушка: функция в разработке
-    await ctx.answerCallbackQuery({
-      text: "🚧 Функция в разработке",
-      show_alert: true,
-    });
-
-  } catch (error) {
-    console.error("Error in regenerate_post callback:", error);
-    
-    try {
-      await ctx.answerCallbackQuery({
-        text: "❌ Произошла ошибка",
-      });
-    } catch (replyError) {
-      console.error("Failed to answer callback query:", replyError);
     }
   }
 }

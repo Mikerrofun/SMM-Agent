@@ -116,3 +116,24 @@ export async function findSimilarPosts(
     similarity: Number(row.similarity),
   }));
 }
+
+
+export async function getTranscriptPostById(
+  id: string
+): Promise<TranscriptPostData | null> {
+  return prisma.transcriptPost.findUnique({
+    where: { id },
+  });
+}
+
+
+
+export async function updateTranscriptPostText(
+  id: string,
+  text: string
+): Promise<TranscriptPostData> {
+  return prisma.transcriptPost.update({
+    where: { id },
+    data: { text },
+  });
+}

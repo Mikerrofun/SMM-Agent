@@ -31,19 +31,9 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
     const postType: PostType = isGenerated ? 'generated' : 'transcript';
     const prefix = isGenerated ? 'regenerate_idea_post:' : 'regenerate_transcript_post:';
     const postId = callbackData.replace(prefix, '');
-    const chatId = ctx.chat?.id;
-    const messageId = ctx.callbackQuery?.message?.message_id;
 
     await ctx.answerCallbackQuery({ text: '⏳ Генерирую...' });
-
-    if (chatId && messageId) {
-      try {
-        await ctx.api.deleteMessage(chatId, messageId);
-      } catch (deleteError) {
-        console.error('[Regenerate] Failed to delete old message:', deleteError);
-      }
-    }
-
+ 
     const statusMessage = await ctx.reply('⏳ Генерирую новый пост...');
 
     const result = postType === 'generated'
@@ -74,6 +64,14 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
+
+    if (ctx.msg) {
+    try {
+      await ctx.api.deleteMessage(ctx.msg.chat.id, ctx.msg.message_id);
+    } catch (deleteError) {
+      console.error('[Regenerate] Failed to delete old message:', deleteError);
+    }
+    }
 
     console.log(`[Regenerate] Successfully regenerated ${postType} post ${postId}`);
   } catch (error) {
@@ -112,7 +110,6 @@ export async function handleRegeneratePostFeedbackCallback(ctx: Context): Promis
     const prefix = isGenerated ? 'regenerate_idea_post_feedback:' : 'regenerate_transcript_post_feedback:';
     const postId = callbackData.replace(prefix, '');
     const userId = ctx.from?.id;
-    const chatId = ctx.chat?.id;
     const messageId = ctx.callbackQuery?.message?.message_id;
 
     if (!userId) {
@@ -122,13 +119,6 @@ export async function handleRegeneratePostFeedbackCallback(ctx: Context): Promis
 
     await ctx.answerCallbackQuery({ text: '✏️ Напишите что не понравилось' });
 
-    if (chatId && messageId) {
-      try {
-        await ctx.api.deleteMessage(chatId, messageId);
-      } catch (deleteError) {
-        console.error('[Regenerate] Failed to delete old message:', deleteError);
-      }
-    }
 
     waitingForFeedback.set(userId, {
       postId,
@@ -212,6 +202,14 @@ export async function handleFeedbackMessage(ctx: Context): Promise<void> {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
+
+    if (ctx.msg) {
+    try {
+      await ctx.api.deleteMessage(ctx.msg.chat.id, ctx.msg.message_id);
+    } catch (deleteError) {
+      console.error('[Regenerate] Failed to delete old message:', deleteError);
+    }
+    }
 
     console.log(`[Regenerate] Successfully regenerated ${postType} post ${postId} with feedback`);
   } catch (error) {

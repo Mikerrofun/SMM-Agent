@@ -3,7 +3,7 @@ import type { RetryConfig } from '../shared/utils/retry';
 
 export const TRANSCRIPT_PROMPT_PATH = resolve(
   process.cwd(),
-  'src/prompts/generate-post.md'
+  'src/prompts/generate-transcript-post.md'
 );
 
 export const TRANSCRIPT_MAX_TOKENS = 2000;

@@ -70,18 +70,19 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
     finalMessage += "\n";
 
     finalMessage += `🔍 <b>Дедупликация:</b>\n`;
-    finalMessage += `   • Проверено идей: ${result.deduplication.total}\n`;
-    finalMessage += `   • Уникальных: ${result.deduplication.unique}\n`;
+    finalMessage += `   • Проверено всего идей: ${result.deduplication.total}\n`;
+    finalMessage += `   • Новых из прогона: ${result.ideas.succeeded}\n`;
+    finalMessage += `   • Уникальных из прогона: ${result.acceptedIdeasFromRun}\n`;
     if (result.deduplication.duplicates > 0) {
-      finalMessage += `   • Дубликатов: ${result.deduplication.duplicates}\n`;
+      finalMessage += `   • Дубликатов найдено: ${result.deduplication.duplicates}\n`;
     }
     finalMessage += "\n";
 
     finalMessage += "━━━━━━━━━━━━━━━━━━━━━━\n";
     finalMessage += `⏱ Время выполнения: ${formatDuration(duration)}\n\n`;
 
-    if (result.deduplication.unique > 0) {
-      finalMessage += `✨ Готово ${result.deduplication.unique} ${pluralizeNewIdea(result.deduplication.unique)}!\n`;
+    if (result.acceptedIdeasFromRun > 0) {
+      finalMessage += `✨ Готово ${result.acceptedIdeasFromRun} ${pluralizeNewIdea(result.acceptedIdeasFromRun)}!\n`;
       finalMessage += "Используйте /ideas для просмотра.";
     } else {
       finalMessage += "💡 Новых уникальных идей не найдено.";

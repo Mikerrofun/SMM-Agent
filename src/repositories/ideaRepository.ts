@@ -248,3 +248,19 @@ export async function markIdeasAsSent(ideaIds: string[]): Promise<number> {
 
   return result.count;
 }
+
+/**
+ * Подсчитывает количество уникальных (не DUPLICATE) идей созданных после указанной даты.
+ * Используется для статистики GenerationRun.
+ *
+ * @param createdAfter — дата начала прогона
+ * @returns количество уникальных идей из прогона
+ */
+export async function countAcceptedIdeasFromRun(createdAfter: Date): Promise<number> {
+  return prisma.idea.count({
+    where: {
+      createdAt: { gte: createdAfter },
+      status: { not: 'DUPLICATE' },
+    },
+  });
+}

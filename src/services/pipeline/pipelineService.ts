@@ -1,6 +1,6 @@
 import { initializeTelegramClient, disconnectClient } from '../../shared/telegram/client';
 import { parseCompetitorsChannels } from '../../parser/competitors/parser';
-import { getUnprocessedCompetitorPosts } from '../../repositories/ideaRepository';
+import { getUnprocessedCompetitorPosts, countAcceptedIdeasFromRun } from '../../repositories/ideaRepository';
 import { processIdeaBatch } from '../idea/ideaProcessor';
 import { deduplicateIdeas } from '../idea/deduplicationService';
 import {
@@ -121,16 +121,20 @@ export async function runFullPipeline(
       `• Дубликатов: ${deduplicationStats.duplicates}`
     );
 
+    // Подсчитываем только уникальные идеи из текущего прогона для записи в GenerationRun
+    const acceptedIdeasCount = await countAcceptedIdeasFromRun(generationRun.startedAt);
+
     await updateGenerationRunSuccess(generationRun.id, {
       processedPosts: parsingStats.savedPosts,
       generatedIdeas: ideasStats.succeeded,
-      acceptedIdeas: deduplicationStats.unique,
+      acceptedIdeas: acceptedIdeasCount,
     });
 
     return {
       parsing: parsingStats,
       ideas: ideasStats,
       deduplication: deduplicationStats,
+      acceptedIdeasFromRun: acceptedIdeasCount,
     };
 
   } catch (error) {

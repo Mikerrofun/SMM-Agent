@@ -14,4 +14,5 @@ export interface PipelineResult {
   parsing: CompetitorParseStatistics;
   ideas: IdeaProcessStats;
   deduplication: DeduplicationStats;
+  acceptedIdeasFromRun: number;
 }

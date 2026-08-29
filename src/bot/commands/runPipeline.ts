@@ -1,10 +1,43 @@
 import type { Context } from "grammy";
 import { runFullPipeline } from "../../services/pipeline/pipelineService";
+import type { PipelineResult, PipelineCommandResult } from "../../services/pipeline/pipelineService.types";
 
 let isPipelineRunning = false;
 const PIPELINE_TIMEOUT_MS = 30 * 60 * 1000;
 
-export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
+
+export function logPipelineStats(result: PipelineResult, duration: number): void {
+  console.log("\n📊 СТАТИСТИКА ВЫПОЛНЕНИЯ:");
+  console.log("━".repeat(60));
+  console.log("\n📡 Парсинг каналов:");
+  console.log(`   • Обработано каналов: ${result.parsing.totalChannels}`);
+  console.log(`   • Успешно: ${result.parsing.successfulChannels}`);
+  console.log(`   • Новых постов: ${result.parsing.savedPosts}`);
+  if (result.parsing.skippedPosts > 0) {
+    console.log(`   • Пропущено (дубли): ${result.parsing.skippedPosts}`);
+  }
+  
+  console.log("\n💡 Генерация идей:");
+  console.log(`   • Обработано постов: ${result.ideas.total}`);
+  console.log(`   • Создано идей: ${result.ideas.succeeded}`);
+  if (result.ideas.failed > 0) {
+    console.log(`   • Ошибок: ${result.ideas.failed}`);
+  }
+  
+  console.log("\n🔍 Дедупликация:");
+  console.log(`   • Проверено всего идей: ${result.deduplication.total}`);
+  console.log(`   • Новых из прогона: ${result.ideas.succeeded}`);
+  console.log(`   • Уникальных из прогона: ${result.acceptedIdeasFromRun}`);
+  if (result.deduplication.duplicates > 0) {
+    console.log(`   • Дубликатов найдено: ${result.deduplication.duplicates}`);
+  }
+  
+  console.log("\n" + "━".repeat(60));
+  console.log(`⏱️  Время выполнения: ${formatDuration(duration)}`);
+  console.log("━".repeat(60) + "\n");
+}
+
+export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCommandResult> {
   let statusMessage: { chat: { id: number }, message_id: number } | null = null;
 
   try {
@@ -12,7 +45,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
       await ctx.reply(
         "⚠️ Пайплайн уже выполняется. Дождитесь завершения текущего прогона."
       );
-      return;
+      return { success: false, error: "Pipeline already running" };
     }
 
     isPipelineRunning = true;
@@ -47,6 +80,9 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
 
     const result = await Promise.race([pipelinePromise, timeoutPromise]);
     const duration = Math.round((Date.now() - startTime) / 1000);
+
+    // Логируем статистику в консоль
+    logPipelineStats(result, duration);
 
     let finalMessage = "✅ <b>Пайплайн успешно завершен!</b>\n\n";
     finalMessage += "📊 <b>Статистика:</b>\n";
@@ -97,6 +133,8 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
       );
     }
 
+    return { success: true, data: result };
+
   } catch (error) {
     console.error("Error in /run_pipeline command:", error);
     
@@ -139,6 +177,8 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<void> {
         console.error("Failed to send fallback message:", fallbackError);
       }
     }
+
+    return { success: false, error: errorMessage };
   } finally {
     isPipelineRunning = false;
   }

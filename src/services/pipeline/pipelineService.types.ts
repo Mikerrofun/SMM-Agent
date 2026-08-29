@@ -16,3 +16,9 @@ export interface PipelineResult {
   deduplication: DeduplicationStats;
   acceptedIdeasFromRun: number;
 }
+
+export interface PipelineCommandResult {
+  success: boolean;
+  data?: PipelineResult;
+  error?: string;
+}

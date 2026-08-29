@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { Context } from "grammy";
 import { bot } from "../bot";
-import { handleRunPipelineCommand } from "../bot/commands/runPipeline";
+import { handleRunPipelineCommand, logPipelineStats } from "../bot/commands/runPipeline";
 
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const CRON_ENABLED = process.env.CRON_ENABLED !== "false"; 
@@ -19,19 +19,22 @@ function createCronContext(chatId: string): Context {
 
 
 async function runScheduledPipeline(): Promise<void> {
-  const timestamp = new Date().toISOString();
+  const startTime = Date.now();
+  const startTimestamp = new Date().toISOString();
   const moscowTime = new Date().toLocaleString("ru-RU", { timeZone: "Europe/Moscow" });
   
   console.log(`\n${"=".repeat(60)}`);
   console.log(`[CRON] 🚀 Автоматический запуск pipeline`);
-  console.log(`[CRON] ⏰ UTC: ${timestamp}`);
+  console.log(`[CRON] ⏰ UTC: ${startTimestamp}`);
   console.log(`[CRON] ⏰ MSK: ${moscowTime}`);
   console.log(`${"=".repeat(60)}\n`);
-
+  
   if (!ADMIN_CHAT_ID) {
     console.error("[CRON] ❌ ADMIN_CHAT_ID не настроен, пропускаем запуск");
     return;
   }
+
+  let pipelineResult: { success: boolean; data?: any; error?: string } | null = null;
 
   try {
     const dayOfWeek = new Date().toLocaleDateString("ru-RU", {
@@ -50,11 +53,7 @@ async function runScheduledPipeline(): Promise<void> {
 
     const ctx = createCronContext(ADMIN_CHAT_ID);
     
-    await handleRunPipelineCommand(ctx);
-
-    console.log("\n" + "=".repeat(60));
-    console.log("[CRON] ✅ Автоматический запуск завершен");
-    console.log("=".repeat(60) + "\n");
+    pipelineResult = await handleRunPipelineCommand(ctx);
 
   } catch (error) {
     console.error("\n" + "=".repeat(60));
@@ -77,6 +76,31 @@ async function runScheduledPipeline(): Promise<void> {
     } catch (notifyError) {
       console.error("[CRON] ❌ Не удалось отправить уведомление об ошибке:", notifyError);
     }
+  } finally {
+    // Гарантированное логирование статистики
+    const endTime = Date.now();
+    const duration = Math.round((endTime - startTime) / 1000);
+    const endTimestamp = new Date().toISOString();
+    const endMoscowTime = new Date().toLocaleString("ru-RU", { timeZone: "Europe/Moscow" });
+    
+    console.log("\n" + "=".repeat(60));
+    console.log("[CRON] 🏁 Завершение автоматического запуска");
+    console.log("=".repeat(60));
+    
+    if (pipelineResult?.success && pipelineResult.data) {
+      // Используем общую функцию для логирования
+      logPipelineStats(pipelineResult.data, duration);
+      console.log("✅ Результат: УСПЕХ");
+    } else if (pipelineResult?.error) {
+      console.log(`\n❌ Результат: ОШИБКА - ${pipelineResult.error}`);
+    } else {
+      console.log(`\n⚠️  Результат: Статистика недоступна`);
+    }
+    
+    console.log(`\n🕐 Начало (UTC): ${startTimestamp}`);
+    console.log(`🕐 Конец  (UTC): ${endTimestamp}`);
+    console.log(`🕐 Конец  (MSK): ${endMoscowTime}`);
+    console.log("=".repeat(60) + "\n");
   }
 }
 

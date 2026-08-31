@@ -1,25 +1,22 @@
-export type DuplicateOfType = 'idea' | 'nataliaPost';
+import type {
+  DuplicateSource,
+  SimilarityMatch,
+  BaseDuplicationResult,
+} from '../shared/deduplication.types';
 
-export interface SimilarityMatch {
-  readonly id: string;
-  readonly similarity: number;
-  readonly createdAt?: Date;
-}
+// Экспорт общих типов для обратной совместимости
+export type { DuplicateSource, SimilarityMatch };
 
-export interface DeduplicationResult {
-  readonly ideaId: string;
-  readonly isDuplicate: boolean;
-  readonly duplicateOfType?: DuplicateOfType;
-  readonly duplicateOfId?: string;
-  readonly similarity?: number;
-}
-
+/**
+ * Статистика батчевой дедупликации идей.
+ */
 export interface DeduplicationStats {
   total: number;
   unique: number;
   duplicates: number;
   duplicatesWithIdeas: number;
   duplicatesWithNataliaPosts: number;
+  duplicatesWithTranscriptPosts: number;
   failed: number;
   failedItems: Array<{
     id: string;
@@ -27,6 +24,10 @@ export interface DeduplicationStats {
   }>;
 }
 
+/**
+ * Опции для функции deduplicateIdeas.
+ */
 export interface DeduplicateIdeasOptions {
   onProgress?: (current: number, total: number) => void;
 }
+

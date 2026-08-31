@@ -1,6 +1,6 @@
 import { prisma } from '../db/client';
 import { CreateNataliaPostInput } from '../shared/types/nataliaPost.types';
-import type { SimilarityMatch } from '../services/idea/deduplication.types';
+import type { SimilarityMatch } from '../services/shared/deduplication.types';
 
 export async function getLatestPublishedDate(): Promise<Date | null> {
   const latestPost = await prisma.nataliaPost.findFirst({

@@ -1,13 +1,21 @@
-export type DuplicationSource = 'natalia' | 'transcript';
+import type {
+  DuplicateSource,
+  SimilarityMatch,
+  BaseDuplicationResult,
+} from '../shared/deduplication.types';
 
-export interface DuplicationResult {
-  isDuplicate: boolean;
-  maxSimilarity: number;
-  source: DuplicationSource | null;
-  /** ID записи, с которой найдено максимальное совпадение. */
-  matchedId: string | null;
-}
+// Экспорт общих типов для обратной совместимости
+export type { DuplicateSource, SimilarityMatch };
 
-export interface EmbeddingCheckResult extends DuplicationResult {
+/**
+ * Результат проверки дедупликации для TranscriptPost.
+ */
+export interface DuplicationResult extends BaseDuplicationResult {}
+
+/**
+ * Результат проверки с embedding.
+ */
+export interface EmbeddingCheckResult extends BaseDuplicationResult {
   embedding: number[];
 }
+

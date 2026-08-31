@@ -1,7 +1,7 @@
 import { prisma } from '../db/client';
 import type { CreateIdeaInput, IdeaProcessItem, IdeaStatus, IdeaWithEmbedding } from '../shared/types/idea.types';
 import type { IdeaModel } from '../db/generated/models/Idea';
-import type { SimilarityMatch, DuplicateOfType } from '../services/idea/deduplication.types';
+import type { SimilarityMatch, DuplicateSource } from '../services/shared/deduplication.types';
 
 
 export async function getUnprocessedCompetitorPosts(): Promise<IdeaProcessItem[]> {
@@ -203,7 +203,7 @@ export async function updateMaxSimilarity(
 
 export async function markAsDuplicate(
   ideaId: string,
-  duplicateOfType: DuplicateOfType,
+  duplicateOfType: DuplicateSource,
   duplicateOfId: string,
   similarity: number
 ): Promise<void> {
@@ -221,6 +221,40 @@ export async function markAsDuplicate(
     const message = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`Failed to mark idea ${ideaId} as duplicate: ${message}`);
   }
+}
+
+/**
+ * Находит похожие идеи для проверки TranscriptPost против Ideas.
+ * @param embedding — вектор для сравнения (массив чисел)
+ * @param threshold — минимальное значение similarity (от 0 до 1)
+ * @returns массив совпадений, отсортированных по similarity DESC
+ * @throws при ошибке БД
+ */
+export async function findSimilarIdeasForTranscript(
+  embedding: number[],
+  threshold: number
+): Promise<SimilarityMatch[]> {
+  const vectorLiteral = `[${embedding.join(',')}]`;
+
+  const result = await prisma.$queryRaw<
+    Array<{ id: string; similarity: number; createdAt: Date }>
+  >`
+    SELECT 
+      id,
+      (1 - (embedding <=> ${vectorLiteral}::vector)) AS similarity,
+      "createdAt"
+    FROM "Idea"
+    WHERE embedding IS NOT NULL
+      AND status = ANY(ARRAY['NEW', 'SENT', 'SELECTED']::\"IdeaStatus\"[])
+      AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
+    ORDER BY similarity DESC, "createdAt" ASC
+  `;
+
+  return result.map((row) => ({
+    id: row.id,
+    similarity: Number(row.similarity),
+    createdAt: row.createdAt,
+  }));
 }
 
 /**

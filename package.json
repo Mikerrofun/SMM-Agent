@@ -19,7 +19,9 @@
     "generate:embeddings:natalia": "tsx src/scripts/generateEmbeddings/natalia.ts",
     "generate:ideas:competitors": "tsx src/scripts/generateIdeas/competitorPostsToIdeas.ts",
     "deduplicate:ideas": "tsx src/scripts/deduplicateIdeas/run.ts",
-    "seed:competitors": "tsx src/scripts/seedCompetitors.ts"
+    "seed:competitors": "tsx src/scripts/seedCompetitors.ts",
+    "db:backup": "tsx src/scripts/db/backup.ts",
+    "db:restore": "tsx src/scripts/db/restore.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

@@ -1,11 +1,3 @@
-/**
- * Общие типы для системы дедупликации.
- * Используются в сервисах дедупликации Ideas, TranscriptPosts и NataliaPost.
- */
-
-/**
- * Тип источника контента для дедупликации.
- */
 export type DuplicateSource = 'idea' | 'nataliaPost' | 'transcriptPost';
 
 /**
@@ -17,9 +9,6 @@ export interface SimilarityMatch {
   readonly createdAt?: Date;
 }
 
-/**
- * Базовый интерфейс результата дедупликации.
- */
 export interface BaseDuplicationResult {
   isDuplicate: boolean;
   maxSimilarity: number;

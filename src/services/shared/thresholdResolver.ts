@@ -10,7 +10,7 @@ import type { DuplicateSource } from './deduplication.types';
  * 
  * Правила:
  * - Проверка против NataliaPost: 0.75
- * - Проверка Ideas ↔ TranscriptPosts: 0.82
+ * - Проверка Ideas ↔ TranscriptPosts: 0.80
  * - Проверка внутри одного типа: 0.75
  * 
  * @param targetSource - источник проверяемого контента
@@ -21,21 +21,17 @@ export function getThreshold(
   targetSource: DuplicateSource,
   checkAgainstSource: DuplicateSource
 ): number {
-  // Проверка против постов Натальи
   if (checkAgainstSource === 'nataliaPost') {
     return DEDUPLICATION_THRESHOLDS.nataliaPost;
   }
 
-  // Проверка Ideas против TranscriptPosts
   if (targetSource === 'idea' && checkAgainstSource === 'transcriptPost') {
     return DEDUPLICATION_THRESHOLDS.crossContent;
   }
 
-  // Проверка TranscriptPosts против Ideas
   if (targetSource === 'transcriptPost' && checkAgainstSource === 'idea') {
     return DEDUPLICATION_THRESHOLDS.crossContent;
   }
 
-  // Проверка внутри одного типа (или любой другой случай)
   return DEDUPLICATION_THRESHOLDS.sameType;
 }

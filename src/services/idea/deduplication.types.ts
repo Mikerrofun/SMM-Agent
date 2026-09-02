@@ -1,10 +1,8 @@
 import type {
   DuplicateSource,
   SimilarityMatch,
-  BaseDuplicationResult,
 } from '../shared/deduplication.types';
 
-// Экспорт общих типов для обратной совместимости
 export type { DuplicateSource, SimilarityMatch };
 
 /**

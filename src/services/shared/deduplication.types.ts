@@ -1,4 +1,4 @@
-export type DuplicateOfType = 'idea' | 'nataliaPost';
+export type DuplicateSource = 'idea' | 'nataliaPost' | 'transcriptPost';
 
 export interface SimilarityMatch {
   readonly id: string;
@@ -6,12 +6,17 @@ export interface SimilarityMatch {
   readonly createdAt?: Date;
 }
 
-export interface DeduplicationResult {
-  readonly ideaId: string;
-  readonly isDuplicate: boolean;
-  readonly duplicateOfType?: DuplicateOfType;
-  readonly duplicateOfId?: string;
-  readonly similarity?: number;
+export interface BaseDuplicationResult {
+  isDuplicate: boolean;
+  maxSimilarity: number;
+  source: DuplicateSource | null;
+  matchedId: string | null;
+}
+
+export type DuplicationResult = BaseDuplicationResult;
+
+export interface EmbeddingCheckResult extends BaseDuplicationResult {
+  embedding: number[];
 }
 
 export interface DeduplicationStats {
@@ -20,6 +25,7 @@ export interface DeduplicationStats {
   duplicates: number;
   duplicatesWithIdeas: number;
   duplicatesWithNataliaPosts: number;
+  duplicatesWithTranscriptPosts: number;
   failed: number;
   failedItems: Array<{
     id: string;

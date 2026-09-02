@@ -6,7 +6,8 @@
  */
 
 import { prisma } from '../db/client';
-import type { SimilarityMatch } from '../services/idea/deduplication.types';
+import type { SimilarityMatch, DuplicateSource } from '../services/shared/deduplication.types';
+import type { TranscriptPostStatus } from '../shared/types/transcript.types';
 import type {
   CreateTranscriptPostInput,
   TranscriptPostData,
@@ -38,14 +39,25 @@ export async function updateEmbedding(
   `;
 }
 
+/**
+ * Помечает TranscriptPost как дубль.
+ * @param id — ID поста
+ * @param duplicateOfType — тип источника дубля
+ * @param duplicateOfId — ID источника дубля
+ * @param similarity — значение similarity
+ */
 export async function markAsDuplicate(
   id: string,
+  duplicateOfType: DuplicateSource,
+  duplicateOfId: string,
   similarity: number
-): Promise<TranscriptPostData> {
-  return prisma.transcriptPost.update({
+): Promise<void> {
+  await prisma.transcriptPost.update({
     where: { id },
     data: {
-      isDuplicate: true,
+      status: 'DUPLICATE',
+      duplicateOfType,
+      duplicateOfId,
       similarity,
     },
   });
@@ -64,12 +76,44 @@ export async function updateSimilarity(
 
 export async function updateStatus(
   id: string,
-  status: 'SENT' | 'REJECTED'
+  status: TranscriptPostStatus
 ): Promise<void> {
   await prisma.transcriptPost.update({
     where: { id },
     data: { status },
   });
+}
+
+/**
+ * Находит похожие TranscriptPost для проверки Ideas против TranscriptPosts.
+ *
+ * Проверяет только посты со статусом SENT — черновики (REJECTED) не участвуют в дедупликации.
+ *
+ * @param embedding — вектор для сравнения
+ * @param threshold — минимальная similarity (0 — вернуть всё)
+ * @returns совпадения, отсортированные по similarity DESC
+ */
+export async function findSimilarPostsForIdeas(
+  embedding: number[],
+  threshold: number
+): Promise<SimilarityMatch[]> {
+  const vectorLiteral = `[${embedding.join(',')}]`;
+
+  const rows = await prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
+    SELECT
+      id,
+      (1 - (embedding <=> ${vectorLiteral}::vector)) AS similarity
+    FROM "TranscriptPost"
+    WHERE embedding IS NOT NULL
+      AND status = 'SENT'
+      AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
+    ORDER BY similarity DESC
+  `;
+
+  return rows.map((row) => ({
+    id: row.id,
+    similarity: Number(row.similarity),
+  }));
 }
 
 

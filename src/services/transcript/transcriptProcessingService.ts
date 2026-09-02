@@ -19,6 +19,7 @@ import {
   updateSimilarity,
   updateStatus,
   getSentPosts,
+  markAsDuplicate,
 } from '../../repositories/transcriptPostRepository';
 import { withRetry } from '../../shared/utils/retry';
 import type { TranscriptPostData } from '../../shared/types/transcript.types';
@@ -75,6 +76,7 @@ async function generateSinglePost(
         similarity: Number(dedupResult.maxSimilarity.toFixed(4)),
         isDuplicate: dedupResult.isDuplicate,
         source: dedupResult.source,
+        matchedId: dedupResult.matchedId,
       });
 
       if (!dedupResult.isDuplicate) {
@@ -85,13 +87,25 @@ async function generateSinglePost(
           ...post,
           status: 'SENT',
           similarity: dedupResult.maxSimilarity,
+          duplicateOfType: null,
+          duplicateOfId: null,
         };
 
         stats.uniquePosts++;
         return sentPost;
       }
 
-      // Дубль: пост остаётся REJECTED, переходим к следующей попытке
+      // Дубль: помечаем как DUPLICATE с информацией об источнике
+      if (dedupResult.source && dedupResult.matchedId) {
+        await markAsDuplicate(
+          post.id,
+          dedupResult.source,
+          dedupResult.matchedId,
+          dedupResult.maxSimilarity
+        );
+      }
+
+      // Переходим к следующей попытке
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push(`post ${postIndex}, attempt ${attempt}: ${message}`);

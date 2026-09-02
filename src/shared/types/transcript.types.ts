@@ -10,13 +10,16 @@ export interface ClientTranscriptData {
   processedAt?: Date | null;
 }
 
+export type TranscriptPostStatus = 'SENT' | 'REJECTED' | 'DUPLICATE';
+
 export interface TranscriptPostData {
   id: string;
   transcriptId: string;
   text: string;
   mainIdea: string;
-  status: 'SENT' | 'REJECTED';
-  isDuplicate: boolean;
+  status: TranscriptPostStatus;
+  duplicateOfType?: string | null;
+  duplicateOfId?: string | null;
   similarity?: number | null;
   attemptNumber: number;
   createdAt: Date;

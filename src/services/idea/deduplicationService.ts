@@ -5,10 +5,11 @@ import {
   updateMaxSimilarity,
 } from '../../repositories/ideaRepository';
 import { findSimilarNataliaPosts } from '../../repositories/nataliaPostRepository';
+import { findSimilarPostsForIdeas } from '../../repositories/transcriptPostRepository';
 import { withRetry } from '../../shared/utils/retry';
-import { SIMILARITY_THRESHOLD, DEDUPLICATION_RETRY_CONFIG } from './deduplication.config';
+import { DEDUPLICATION_RETRY_CONFIG } from '../shared/deduplication.config';
 import { resolveBestMatch } from '../shared/similarityResolver';
-import type { DeduplicationStats, DeduplicateIdeasOptions } from './deduplication.types';
+import type { DeduplicationStats, DeduplicateIdeasOptions } from '../shared/deduplication.types';
 
 export async function deduplicateIdeas(
   options?: DeduplicateIdeasOptions
@@ -21,6 +22,7 @@ export async function deduplicateIdeas(
     duplicates: 0,
     duplicatesWithIdeas: 0,
     duplicatesWithNataliaPosts: 0,
+    duplicatesWithTranscriptPosts: 0,
     failed: 0,
     failedItems: [],
   };
@@ -39,39 +41,35 @@ export async function deduplicateIdeas(
       const embeddingArray = parseEmbeddingString(idea.embedding);
 
       await withRetry(async () => {
-        const allSimilarIdeas = await findSimilarIdeas(
-          embeddingArray,
-          0,
-          idea.id
-        );
+          const [nataliaMatches, transcriptMatches, ideaMatches] = await Promise.all([
+             findSimilarIdeas(embeddingArray, 0, idea.id),
+             findSimilarNataliaPosts(embeddingArray, 0),
+             findSimilarPostsForIdeas(embeddingArray, 0),
+          ]);
+        
+          const { maxSimilarity, source, matchedId } = resolveBestMatch('idea', [
+            { source: 'idea', matches: nataliaMatches },
+            { source: 'nataliaPost', matches: transcriptMatches },
+            { source: 'transcriptPost', matches: ideaMatches },
+          ]);
 
-        const allSimilarPosts = await findSimilarNataliaPosts(
-          embeddingArray,
-          0
-        );
+        const isDuplicate = source !== null && matchedId !== null;
 
-        const { maxSimilarity, source, matchedId } = resolveBestMatch([
-          { source: 'idea' as const, matches: allSimilarIdeas },
-          { source: 'nataliaPost' as const, matches: allSimilarPosts },
-        ]);
-
-        const isDuplicate = maxSimilarity >= SIMILARITY_THRESHOLD;
-        const duplicateSource = isDuplicate ? source : null;
-        const duplicateId = isDuplicate ? matchedId : null;
-
-        if (isDuplicate && duplicateSource && duplicateId) {
+        if (isDuplicate && source && matchedId) {
           await markAsDuplicate(
             idea.id,
-            duplicateSource,
-            duplicateId,
+            source,
+            matchedId,
             maxSimilarity
           );
 
           stats.duplicates++;
-          if (duplicateSource === 'idea') {
+          if (source === 'idea') {
             stats.duplicatesWithIdeas++;
-          } else {
+          } else if (source === 'nataliaPost') {
             stats.duplicatesWithNataliaPosts++;
+          } else if (source === 'transcriptPost') {
+            stats.duplicatesWithTranscriptPosts++;
           }
         } else {
           if (maxSimilarity > 0) {
@@ -113,3 +111,4 @@ function parseEmbeddingString(embeddingStr: string): number[] {
     );
   }
 }
+

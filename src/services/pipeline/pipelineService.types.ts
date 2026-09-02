@@ -1,6 +1,6 @@
 import type { CompetitorParseStatistics } from '../../shared/types/competitorPost.types';
 import type { IdeaProcessStats } from '../idea/ideaProcessor.types';
-import type { DeduplicationStats } from '../idea/deduplication.types';
+import type { DeduplicationStats } from '../shared/deduplication.types';
 
 export type PipelineStage = 'parsing' | 'ideas' | 'deduplication';
 

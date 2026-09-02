@@ -7,6 +7,7 @@
 
 import { prisma } from '../db/client';
 import type { SimilarityMatch, DuplicateSource } from '../services/shared/deduplication.types';
+import type { TranscriptPostStatus } from '../shared/types/transcript.types';
 import type {
   CreateTranscriptPostInput,
   TranscriptPostData,
@@ -75,7 +76,7 @@ export async function updateSimilarity(
 
 export async function updateStatus(
   id: string,
-  status: 'SENT' | 'REJECTED' | 'DUPLICATE'
+  status: TranscriptPostStatus
 ): Promise<void> {
   await prisma.transcriptPost.update({
     where: { id },

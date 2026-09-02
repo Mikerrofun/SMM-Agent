@@ -20,7 +20,7 @@ import { DeduplicationError } from './errors';
 import type {
   DuplicationResult,
   EmbeddingCheckResult,
-} from './deduplication.types';
+} from '../shared/deduplication.types';
 
 
 export async function checkPostDuplication(

@@ -9,7 +9,7 @@ import { findSimilarPostsForIdeas } from '../../repositories/transcriptPostRepos
 import { withRetry } from '../../shared/utils/retry';
 import { DEDUPLICATION_RETRY_CONFIG } from '../shared/deduplication.config';
 import { resolveBestMatch } from '../shared/similarityResolver';
-import type { DeduplicationStats, DeduplicateIdeasOptions } from './deduplication.types';
+import type { DeduplicationStats, DeduplicateIdeasOptions } from '../shared/deduplication.types';
 
 export async function deduplicateIdeas(
   options?: DeduplicateIdeasOptions

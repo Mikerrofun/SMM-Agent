@@ -41,16 +41,16 @@ export async function deduplicateIdeas(
       const embeddingArray = parseEmbeddingString(idea.embedding);
 
       await withRetry(async () => {
-          const [nataliaMatches, transcriptMatches, ideaMatches] = await Promise.all([
+          const [ideaMatches, nataliaMatches, transcriptMatches] = await Promise.all([
              findSimilarIdeas(embeddingArray, 0, idea.id),
              findSimilarNataliaPosts(embeddingArray, 0),
              findSimilarPostsForIdeas(embeddingArray, 0),
           ]);
         
           const { maxSimilarity, source, matchedId } = resolveBestMatch('idea', [
-            { source: 'idea', matches: nataliaMatches },
-            { source: 'nataliaPost', matches: transcriptMatches },
-            { source: 'transcriptPost', matches: ideaMatches },
+            { source: 'idea', matches: ideaMatches },
+            { source: 'nataliaPost', matches: nataliaMatches },
+            { source: 'transcriptPost', matches: transcriptMatches },
           ]);
 
         const isDuplicate = source !== null && matchedId !== null;

@@ -136,9 +136,9 @@ export async function markAsDuplicate(id: string, duplicateOfType: DuplicateSour
 ```ts
 // src/services/idea/deduplicationService.ts
 const [ideaMatches, nataliaMatches, transcriptMatches] = await Promise.all([
-  findSimilarIdeas(embeddingArray, 0, idea.id),
-  findSimilarNataliaPosts(embeddingArray, 0),
-  findSimilarPostsForIdeas(embeddingArray, 0),
+  findSimilarIdeas(embeddingArray, 0, idea.id),           // Ideas
+  findSimilarNataliaPosts(embeddingArray, 0),             // NataliaPosts
+  findSimilarPostsForIdeas(embeddingArray, 0),            // TranscriptPosts
 ]);
 const { maxSimilarity, source, matchedId } = resolveBestMatch('idea', [
   { source: 'idea', matches: ideaMatches },
@@ -222,4 +222,47 @@ runFullPipeline(onProgress)↓createGenerationRun(RUNNING)↓parseCompetitorsCha
 - ✅ Пороги централизованы в DEDUPLICATION_THRESHOLDS + thresholdResolver.
 - ✅ Новый код — только 2 репозиторий-метода + thresholdResolver; остальное переиспользовано.
 - ✅ npx tsc --noEmit чистый после удаления обоих дублирующих файлов.
+
+## 7. Bugfix (03.09.2026)
+
+### Проблема
+После рефакторинга в `deduplicationService.ts` были перепутаны имена переменных при деструктуризации результатов Promise.all:
+
+```ts
+// Было (неправильно):
+const [nataliaMatches, transcriptMatches, ideaMatches] = await Promise.all([
+   findSimilarIdeas(...),           // возвращает Ideas, но присваивается в nataliaMatches
+   findSimilarNataliaPosts(...),    // возвращает Natalia, но присваивается в transcriptMatches
+   findSimilarPostsForIdeas(...),   // возвращает Transcript, но присваивается в ideaMatches
+]);
+
+const { maxSimilarity, source, matchedId } = resolveBestMatch('idea', [
+  { source: 'idea', matches: nataliaMatches },           // передавались Ideas как Natalia
+  { source: 'nataliaPost', matches: transcriptMatches }, // передавались Natalia как Transcript
+  { source: 'transcriptPost', matches: ideaMatches },    // передавались Transcript как Ideas
+]);
+```
+
+Это приводило к:
+- Неправильному применению порогов (0.75/0.80 применялись к неверным источникам)
+- Неправильной записи `duplicateOfType` в БД
+- Некорректной статистике дубликатов
+
+### Решение
+Исправлены имена переменных — теперь они соответствуют порядку вызовов:
+
+```ts
+// Стало (правильно):
+const [ideaMatches, nataliaMatches, transcriptMatches] = await Promise.all([
+  findSimilarIdeas(...),           // Ideas → ideaMatches
+  findSimilarNataliaPosts(...),    // Natalia → nataliaMatches  
+  findSimilarPostsForIdeas(...),   // Transcript → transcriptMatches
+]);
+
+const { maxSimilarity, source, matchedId } = resolveBestMatch('idea', [
+  { source: 'idea', matches: ideaMatches },
+  { source: 'nataliaPost', matches: nataliaMatches },
+  { source: 'transcriptPost', matches: transcriptMatches },
+]);
+```
 

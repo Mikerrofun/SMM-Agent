@@ -415,16 +415,25 @@ export function resolveBestMatch(
       continue; // Нет совпадений в этом источнике
     }
 
-    // Получаем порог для этой пары источников
+    // ═══════════════════════════════════════════════════════════════
+    // ШАГ 1: Обновляем maxSimilarity для ВСЕХ совпадений (для аналитики)
+    // ═══════════════════════════════════════════════════════════════
+    // Даже если similarity ниже порога, записываем её для аналитики
+    if (best.similarity > maxSimilarity) {
+      maxSimilarity = best.similarity;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ШАГ 2: Проверяем порог для определения дубликата
+    // ═══════════════════════════════════════════════════════════════
     const threshold = getThreshold(targetSource, candidate.source);
     // Пример:
     // targetSource='idea', candidate.source='nataliaPost' → threshold=0.75
     // targetSource='idea', candidate.source='transcriptPost' → threshold=0.80
     // targetSource='idea', candidate.source='idea' → threshold=0.75
 
-    // Проверяем: similarity >= порога И больше текущего максимума?
-    if (best.similarity >= threshold && best.similarity > maxSimilarity) {
-      maxSimilarity = best.similarity;
+    // Только если >= порога — считаем это дублем
+    if (best.similarity >= threshold && best.similarity > 0) {
       source = candidate.source;
       matchedId = best.id;
     }
@@ -441,16 +450,15 @@ export function resolveBestMatch(
 **1. SQL запросы возвращают:**
 ```
 ideaMatches = [
-  { id: 'idea-123', similarity: 0.92, createdAt: '2026-01-01' },
-  { id: 'idea-456', similarity: 0.76, createdAt: '2026-01-02' }
+  { id: 'idea-123', similarity: 0.60 },  // ниже порога 0.75
 ]
 
 nataliaMatches = [
-  { id: 'natalia-789', similarity: 0.87 }
+  { id: 'natalia-789', similarity: 0.73 }  // ниже порога 0.75
 ]
 
 transcriptMatches = [
-  { id: 'transcript-321', similarity: 0.78 }
+  { id: 'transcript-321', similarity: 0.68 }  // ниже порога 0.80
 ]
 ```
 
@@ -466,36 +474,41 @@ resolveBestMatch('idea', [
 **3. Resolver проходит по источникам:**
 
 **Итерация 1:** `candidate.source = 'idea'`
-- `best = ideaMatches[0]` → `{ id: 'idea-123', similarity: 0.92 }`
-- `threshold = getThreshold('idea', 'idea')` → `0.75`
-- `0.92 >= 0.75 && 0.92 > 0` → **✅ TRUE**
-- Обновляем: `maxSimilarity=0.92, source='idea', matchedId='idea-123'`
+- `best = ideaMatches[0]` → `{ id: 'idea-123', similarity: 0.60 }`
+- **ШАГ 1:** `0.60 > 0` → обновляем `maxSimilarity=0.60`
+- **ШАГ 2:** `threshold = getThreshold('idea', 'idea')` → `0.75`
+- `0.60 >= 0.75` → **❌ FALSE** (не дубль)
+- `source` и `matchedId` остаются `null`
 
 **Итерация 2:** `candidate.source = 'nataliaPost'`
-- `best = nataliaMatches[0]` → `{ id: 'natalia-789', similarity: 0.87 }`
-- `threshold = getThreshold('idea', 'nataliaPost')` → `0.75`
-- `0.87 >= 0.75 && 0.87 > 0.92` → **❌ FALSE** (не больше текущего макс)
-- Пропускаем
+- `best = nataliaMatches[0]` → `{ id: 'natalia-789', similarity: 0.73 }`
+- **ШАГ 1:** `0.73 > 0.60` → обновляем `maxSimilarity=0.73`
+- **ШАГ 2:** `threshold = getThreshold('idea', 'nataliaPost')` → `0.75`
+- `0.73 >= 0.75` → **❌ FALSE** (не дубль)
+- `source` и `matchedId` остаются `null`
 
 **Итерация 3:** `candidate.source = 'transcriptPost'`
-- `best = transcriptMatches[0]` → `{ id: 'transcript-321', similarity: 0.78 }`
-- `threshold = getThreshold('idea', 'transcriptPost')` → `0.80`
-- `0.78 >= 0.80` → **❌ FALSE** (не прошёл порог 0.80)
-- Пропускаем
+- `best = transcriptMatches[0]` → `{ id: 'transcript-321', similarity: 0.68 }`
+- **ШАГ 1:** `0.68 > 0.73` → **❌ FALSE** (не обновляем, т.к. меньше текущего макс)
+- **ШАГ 2:** `threshold = getThreshold('idea', 'transcriptPost')` → `0.80`
+- `0.68 >= 0.80` → **❌ FALSE** (не дубль)
+- `source` и `matchedId` остаются `null`
 
 **4. Результат:**
 ```ts
 {
-  maxSimilarity: 0.92,
-  source: 'idea',
-  matchedId: 'idea-123'
+  maxSimilarity: 0.73,   // Максимальное значение среди всех источников
+  source: null,          // Нет дублей (все ниже порогов)
+  matchedId: null
 }
 ```
 
 **5. Принятие решения:**
-- `isDuplicate = true` (source !== null)
-- Вызываем `markAsDuplicate(currentIdeaId, 'idea', 'idea-123', 0.92)`
-- `stats.duplicatesWithIdeas++`
+- `isDuplicate = false` (source === null)
+- Вызываем `updateMaxSimilarity(currentIdeaId, 0.73)` ← **записывается для аналитики!**
+- `stats.unique++`
+
+**Важно:** Теперь даже если все similarity ниже порогов, `maxSimilarity` всё равно записывается в БД. Это позволяет анализировать "почти дубли" и корректировать пороги.
 
   
 
@@ -633,10 +646,11 @@ CLI выводит статистику (total, unique, duplicates, failed)
 
 ## История изменений
 
-**03.09.2026** — Рефакторинг унификации типов и багфикс (см. `UPDATE_DEDUPLICATION.md`):
+**03.09.2026** — Рефакторинг унификации типов и 2 багфикса (см. `UPDATE_DEDUPLICATION.md`):
 - Типы объединены в `shared/deduplication.types.ts`
 - Добавлена тройная проверка Ideas ↔ NataliaPosts ↔ TranscriptPosts
-- Исправлены перепутанные переменные в `deduplicationService.ts`
+- **Bugfix #1:** Исправлены перепутанные переменные в `deduplicationService.ts`
+- **Bugfix #2:** `maxSimilarity` теперь записывается даже если все совпадения ниже порога (разделена логика аналитики и определения дублей)
 - Дифференцированные пороги через `thresholdResolver` (0.75/0.80)
 
 **06.08.2026** — Первая версия системы дедупликации для Ideas

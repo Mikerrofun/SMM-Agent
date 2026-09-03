@@ -266,3 +266,56 @@ const { maxSimilarity, source, matchedId } = resolveBestMatch('idea', [
 ]);
 ```
 
+### Bugfix #2 - maxSimilarity не записывался для контента ниже порога (03.09.2026)
+
+**Проблема:**
+В `resolveBestMatch` логика обновления `maxSimilarity` была внутри условия `if (similarity >= threshold)`. Это означало, что если ВСЕ совпадения были ниже порога, `maxSimilarity` оставался 0 и не записывался в БД.
+
+```ts
+// Было (неправильно):
+for (const candidate of sources) {
+  const best = candidate.matches[0];
+  if (!best) continue;
+  
+  const threshold = getThreshold(targetSource, candidate.source);
+  
+  // maxSimilarity обновлялся только если >= threshold
+  if (best.similarity >= threshold && best.similarity > maxSimilarity) {
+    maxSimilarity = best.similarity;
+    source = candidate.source;
+    matchedId = best.id;
+  }
+}
+// Если все similarity < threshold → maxSimilarity = 0 → не записывается в БД
+```
+
+**Решение:**
+Разделили логику:
+1. Обновляем `maxSimilarity` для ВСЕХ совпадений (для аналитики)
+2. Определяем `source` и `matchedId` только если `similarity >= threshold` (для дубликатов)
+
+```ts
+// Стало (правильно):
+for (const candidate of sources) {
+  const best = candidate.matches[0];
+  if (!best) continue;
+  
+  // 1. Всегда обновляем maxSimilarity (даже если ниже порога)
+  if (best.similarity > maxSimilarity) {
+    maxSimilarity = best.similarity;
+  }
+  
+  // 2. Проверяем порог для определения дубликата
+  const threshold = getThreshold(targetSource, candidate.source);
+  if (best.similarity >= threshold && best.similarity > 0) {
+    source = candidate.source;
+    matchedId = best.id;
+  }
+}
+```
+
+Теперь:
+- `maxSimilarity` записывается для ВСЕХ идей (даже 0.60, 0.50, и т.д.)
+- `isDuplicate=true` только если `similarity >= threshold` (0.75/0.80)
+- Аналитика показывает "почти дубли" (например, similarity=0.73)
+

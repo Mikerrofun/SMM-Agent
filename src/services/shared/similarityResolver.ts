@@ -18,10 +18,13 @@ export function resolveBestMatch(
       continue;
     }
 
+    if (best.similarity > maxSimilarity) {
+      maxSimilarity = best.similarity;
+    }
+
     const threshold = getThreshold(targetSource, candidate.source);
 
-    if (best.similarity >= threshold && best.similarity > maxSimilarity) {
-      maxSimilarity = best.similarity;
+    if (best.similarity >= threshold && best.similarity > 0) {
       source = candidate.source;
       matchedId = best.id;
     }

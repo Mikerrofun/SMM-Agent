@@ -25,7 +25,7 @@ Supabase на бесплатном тарифе не предоставляет 
 ```ts
 // src/scripts/db/backup.ts
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import * as dotenv from 'dotenv';
 
@@ -42,8 +42,36 @@ function parseDatabaseUrl(url: string) {
   };
 }
 
+function cleanOldBackups(backupDir: string, maxAgeDays: number) {
+  const now = Date.now();
+  const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+
+  const backupFiles = readdirSync(backupDir)
+    .filter((file) => file.startsWith('backup-') && file.endsWith('.sql'))
+    .map((file) => {
+      const filePath = join(backupDir, file);
+      const stats = statSync(filePath);
+      return {
+        name: file,
+        path: filePath,
+        mtime: stats.mtime.getTime(),
+        age: now - stats.mtime.getTime(),
+      };
+    });
+
+  const oldBackups = backupFiles.filter((backup) => backup.age > maxAgeMs);
+
+  if (oldBackups.length > 0) {
+    console.log(`🗑️ Удаляю старые бэкапы (старше ${maxAgeDays} дней)`);
+    oldBackups.forEach((backup) => {
+      unlinkSync(backup.path);
+      const ageDays = Math.floor(backup.age / (24 * 60 * 60 * 1000));
+      console.log(`❌ ${backup.name} (возраст: ${ageDays} дней)`);
+    });
+  }
+}
+
 async function createBackup() {
-  // Приоритет DIRECT_URL над DATABASE_URL (pooler vs direct connection)
   let databaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
   if (!databaseUrl) {
     console.error('❌ DIRECT_URL или DATABASE_URL не найден');
@@ -57,7 +85,6 @@ async function createBackup() {
     mkdirSync(backupDir, { recursive: true });
   }
 
-  // Имя файла: backup-2026-09-02-14-30-15.sql
   const timestamp = new Date()
     .toISOString()
     .replace(/T/, '-')
@@ -65,7 +92,6 @@ async function createBackup() {
     .replace(/:/g, '-');
   const filepath = join(backupDir, `backup-${timestamp}.sql`);
 
-  // PostgreSQL 17 для совместимости с Supabase (сервер 17.6)
   const pgDumpPath = '/opt/homebrew/opt/postgresql@17/bin/pg_dump';
   
   execSync(
@@ -77,6 +103,9 @@ async function createBackup() {
   );
 
   console.log(`✅ Бэкап создан: ${filepath}`);
+  
+  // Автоматическая ротация: удаление бэкапов старше 10 дней
+  cleanOldBackups(backupDir, 10);
 }
 
 createBackup();
@@ -178,6 +207,10 @@ execSync(pg_dump) → вызывает PostgreSQL утилиту
 pg_dump → подключается к Supabase → выгружает таблицы + данные
 ↓
 записывает в db-backups/backup-2026-09-02-14-30-15.sql (3.6 MB)
+↓
+cleanOldBackups(backupDir, 10) → удаляет файлы старше 10 дней
+↓
+Выводит статистику: сколько удалено, сколько осталось
 ```
 
 ### Восстановление:
@@ -213,12 +246,13 @@ Supabase перезаписывается содержимым из файла
    `DATABASE_URL` использует pooler (pgBouncer) через порт 6543 с параметром `?pgbouncer=true`. `pg_dump` не работает с pgBouncer (транзакционный режим конфликтует с утилитами). `DIRECT_URL` — прямое подключение к Postgres через порт 5432.
 
 6. **Почему timestamp в имени файла, а не перезапись одного `backup.sql`?**  
-   Несколько бэкапов = история изменений. Можно откатиться не на последний, а на предыдущий. Timestamp в формате `YYYY-MM-DD-HH-MM-SS` — читаемо и сортируется лексикографически.
+   Несколько бэкапов = история изменений. Можно откатиться не на последний, а на предыдущий. Timestamp в формате `YYYY-MM-DD-HH-MM-SS` — читаемо и сортируется лексикографически. Автоматическая ротация (10 дней) предотвращает переполнение диска.
 
 ## Преимущества
 
 - ✅ Одна команда для полного дампа всей базы (структура + данные + 3.6 MB контента)
 - ✅ Автоматическое восстановление последнего бэкапа без ручного выбора файла
+- ✅ Автоматическая ротация — бэкапы старше 10 дней удаляются после создания нового
 - ✅ Нет зависимости от облачных сервисов — работает оффлайн на локальной машине
 - ✅ Использует нативные PostgreSQL утилиты (pg_dump/psql) вместо самописных парсеров SQL
 - ✅ Совместимость версий — явный путь к PostgreSQL 17 для работы с Supabase 17.6
@@ -227,3 +261,67 @@ Supabase перезаписывается содержимым из файла
 - ✅ Timestamp в именах файлов — уникальность, сортировка, история изменений
 - ✅ Игнорирование `/db-backups` в Git — приватные данные не попадают в репозиторий
 - ✅ Fallback с `DIRECT_URL` на `DATABASE_URL` — работает даже если одна переменная отсутствует
+- ✅ Готов к использованию в cron — ротация предотвращает переполнение диска
+
+
+## Использование в cron
+
+### Проверка пути к pg_dump
+
+Перед добавлением в cron убедись, что путь к `pg_dump` правильный:
+
+```bash
+/opt/homebrew/opt/postgresql@17/bin/pg_dump --version
+```
+
+Если команда не найдена, найди правильный путь:
+
+```bash
+which pg_dump
+# или
+brew --prefix postgresql@17
+```
+
+### Настройка crontab
+
+Открой редактор cron:
+```bash
+crontab -e
+```
+
+Добавь строку для ежедневного бэкапа в 3:00 ночи:
+```bash
+# Ежедневный бэкап базы данных в 3:00
+0 3 * * * cd /Users/admin/Mikerrofun/FullStack/Projects/SMM-Agent && /usr/local/bin/npm run db:backup >> /tmp/db-backup.log 2>&1
+```
+
+**Важные моменты:**
+- `cd` в директорию проекта — чтобы `dotenv` нашёл `.env`
+- Полный путь к `npm` (обычно `/usr/local/bin/npm` или `/opt/homebrew/bin/npm`)
+- Логи перенаправляются в `/tmp/db-backup.log` — можно проверить результат
+
+### Проверка настройки
+
+Запусти задачу вручную через 3 минуты для тестирования:
+```bash
+# Например, если сейчас 14:25, поставь на 14:28
+28 14 * * * cd /Users/admin/Mikerrofun/FullStack/Projects/SMM-Agent && /usr/local/bin/npm run db:backup >> /tmp/db-backup.log 2>&1
+```
+
+Проверь лог через несколько минут:
+```bash
+cat /tmp/db-backup.log
+```
+
+### Альтернативные расписания
+
+```bash
+# Каждые 12 часов (в 3:00 и 15:00)
+0 3,15 * * * cd /Users/admin/Mikerrofun/FullStack/Projects/SMM-Agent && npm run db:backup >> /tmp/db-backup.log 2>&1
+
+# Каждый понедельник в 2:00
+0 2 * * 1 cd /Users/admin/Mikerrofun/FullStack/Projects/SMM-Agent && npm run db:backup >> /tmp/db-backup.log 2>&1
+
+# Каждый час (для критичных данных)
+0 * * * * cd /Users/admin/Mikerrofun/FullStack/Projects/SMM-Agent && npm run db:backup >> /tmp/db-backup.log 2>&1
+```

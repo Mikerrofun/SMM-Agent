@@ -3,6 +3,13 @@ import { InlineKeyboard } from "grammy";
 import { getNewIdeasForSending, markIdeasAsSent } from "../../repositories/ideaRepository";
 import { generatePostForIdea } from "../../services/post/postGenerationService";
 import { escapeHtml } from "../utils";
+import { bot } from "../index";
+
+// Получаем список подписчиков из env
+const SUBSCRIBER_CHAT_IDS = process.env.SUBSCRIBER_CHAT_IDS
+  ?.split(',')
+  .map(id => id.trim())
+  .filter(id => id.length > 0) || [];
 
 export async function handleIdeasCommand(ctx: Context): Promise<void> {
   try {
@@ -23,27 +30,49 @@ export async function handleIdeasCommand(ctx: Context): Promise<void> {
     }
 
     const sentIdeaIds: string[] = [];
+    
+    // Определяем кому отправлять: если есть подписчики — всем, иначе только текущему юзеру
+    const recipientIds = SUBSCRIBER_CHAT_IDS.length > 0 
+      ? SUBSCRIBER_CHAT_IDS 
+      : [ctx.chat!.id.toString()];
 
-    for (const idea of ideas) {
-      try {
-        const keyboard = new InlineKeyboard().text(
-          "✍️ Сгенерировать пост",
-          `generate_post:${idea.id}`
-        );
+    console.log(`[IDEAS] 📤 Отправка ${ideas.length} идей для ${recipientIds.length} получателей`);
 
-        await ctx.reply(
-          `💡 <b>${escapeHtml(idea.title)}</b>\n\n` +
-          `📝 <b>Идея:</b>\n${escapeHtml(idea.mainIdea)}\n\n` +
-          `🎯 <b>Цель:</b>\n${escapeHtml(idea.goal)}`,
-          {
-            parse_mode: "HTML",
-            reply_markup: keyboard,
+    for (const chatId of recipientIds) {
+      for (const idea of ideas) {
+        try {
+          const keyboard = new InlineKeyboard().text(
+            "✍️ Сгенерировать пост",
+            `generate_post:${idea.id}`
+          );
+
+          await bot.api.sendMessage(
+            chatId,
+            `💡 <b>${escapeHtml(idea.title)}</b>\n\n` +
+            `📝 <b>Идея:</b>\n${escapeHtml(idea.mainIdea)}\n\n` +
+            `🎯 <b>Цель:</b>\n${escapeHtml(idea.goal)}`,
+            {
+              parse_mode: "HTML",
+              reply_markup: keyboard,
+            }
+          );
+
+          if (!sentIdeaIds.includes(idea.id)) {
+            sentIdeaIds.push(idea.id);
           }
-        );
 
-        sentIdeaIds.push(idea.id);
+        } catch (error) {
+          console.error(`Failed to send idea ${idea.id} to ${chatId}:`, error);
+        }
+      }
+
+      try {
+        await bot.api.sendMessage(
+          chatId,
+          `✅ Отправлено ${ideas.length} ${pluralizeIdea(ideas.length)}!`
+        );
       } catch (error) {
-        console.error(`Failed to send idea ${idea.id}:`, error);
+        console.error(`Failed to send summary to ${chatId}:`, error);
       }
     }
 
@@ -54,14 +83,6 @@ export async function handleIdeasCommand(ctx: Context): Promise<void> {
       } catch (error) {
         console.error("Failed to mark ideas as SENT:", error);
       }
-
-      await ctx.reply(
-        `✅ Отправлено ${sentIdeaIds.length} ${pluralizeIdea(sentIdeaIds.length)}!`
-      );
-    } else if (ideas.length > 0) {
-      await ctx.reply(
-        `⚠️ Не удалось отправить идеи. Попробуйте позже.`
-      );
     }
 
   } catch (error) {

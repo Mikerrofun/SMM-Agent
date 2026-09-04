@@ -1,6 +1,7 @@
 import type { Context } from "grammy";
 import { runFullPipeline } from "../../services/pipeline/pipelineService";
 import type { PipelineResult, PipelineCommandResult } from "../../services/pipeline/pipelineService.types";
+import { formatPipelineReport, formatDuration, pluralizeNewIdea } from "../../shared/utils/pipelineReportFormatter";
 
 let isPipelineRunning = false;
 const PIPELINE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -81,48 +82,9 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
     const result = await Promise.race([pipelinePromise, timeoutPromise]);
     const duration = Math.round((Date.now() - startTime) / 1000);
 
-    // Логируем статистику в консоль
     logPipelineStats(result, duration);
 
-    let finalMessage = "✅ <b>Пайплайн успешно завершен!</b>\n\n";
-    finalMessage += "📊 <b>Статистика:</b>\n";
-    finalMessage += "━━━━━━━━━━━━━━━━━━━━━━\n\n";
-
-    finalMessage += `📡 <b>Парсинг каналов:</b>\n`;
-    finalMessage += `   • Обработано каналов: ${result.parsing.totalChannels}\n`;
-    finalMessage += `   • Успешно: ${result.parsing.successfulChannels}\n`;
-    finalMessage += `   • Новых постов: ${result.parsing.savedPosts}\n`;
-    if (result.parsing.skippedPosts > 0) {
-      finalMessage += `   • Пропущено (дубли): ${result.parsing.skippedPosts}\n`;
-    }
-    finalMessage += "\n";
-
-    finalMessage += `💡 <b>Генерация идей:</b>\n`;
-    finalMessage += `   • Обработано постов: ${result.ideas.total}\n`;
-    finalMessage += `   • Создано идей: ${result.ideas.succeeded}\n`;
-    if (result.ideas.failed > 0) {
-      finalMessage += `   • Ошибок: ${result.ideas.failed}\n`;
-    }
-    finalMessage += "\n";
-
-    finalMessage += `🔍 <b>Дедупликация:</b>\n`;
-    finalMessage += `   • Проверено всего идей: ${result.deduplication.total}\n`;
-    finalMessage += `   • Новых из прогона: ${result.ideas.succeeded}\n`;
-    finalMessage += `   • Уникальных из прогона: ${result.acceptedIdeasFromRun}\n`;
-    if (result.deduplication.duplicates > 0) {
-      finalMessage += `   • Дубликатов найдено: ${result.deduplication.duplicates}\n`;
-    }
-    finalMessage += "\n";
-
-    finalMessage += "━━━━━━━━━━━━━━━━━━━━━━\n";
-    finalMessage += `⏱ Время выполнения: ${formatDuration(duration)}\n\n`;
-
-    if (result.acceptedIdeasFromRun > 0) {
-      finalMessage += `✨ Готово ${result.acceptedIdeasFromRun} ${pluralizeNewIdea(result.acceptedIdeasFromRun)}!\n`;
-      finalMessage += "Используйте /ideas для просмотра.";
-    } else {
-      finalMessage += "💡 Новых уникальных идей не найдено.";
-    }
+    const finalMessage = formatPipelineReport(result, duration);
 
     if (statusMessage) {
       await ctx.api.editMessageText(
@@ -200,36 +162,5 @@ export async function handleRunPipelineCallback(ctx: Context): Promise<void> {
   }
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds} сек`;
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-
-  if (remainingSeconds === 0) {
-    return `${minutes} мин`;
-  }
-
-  return `${minutes} мин ${remainingSeconds} сек`;
-}
-
-function pluralizeNewIdea(count: number): string {
-  const lastDigit = count % 10;
-  const lastTwoDigits = count % 100;
-
-  if (lastTwoDigits >= 11 && lastTwoDigits <= 19) {
-    return "новых идей";
-  }
-
-  if (lastDigit === 1) {
-    return "новая идея";
-  }
-
-  if (lastDigit >= 2 && lastDigit <= 4) {
-    return "новые идеи";
-  }
-
-  return "новых идей";
-}
+// Экспортируем для использования в других модулях
+export { formatPipelineReport, formatDuration, pluralizeNewIdea };

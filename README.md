@@ -60,3 +60,31 @@ npm run dev
 - [docs/MAIN_IDEA_EXTRACTION.md](docs/MAIN_IDEA_EXTRACTION.md) — извлечение главной мысли (mainIdea) через LLM.
 - [docs/features/TRANSCRIPT_POST_GENERATION.md](docs/features/TRANSCRIPT_POST_GENERATION.md) — генерация постов из транскрипций встреч (`/transcript_post`).
 
+
+
+## Как узнать свой Telegram ID
+
+Для настройки `SUBSCRIBER_CHAT_IDS` нужны числовые ID пользователей Telegram:
+
+### Вариант 1: Через @userinfobot (самый простой)
+1. Напишите боту [@userinfobot](https://t.me/userinfobot) в Telegram
+2. Он ответит вам с вашим ID (например: `6788213640`)
+
+### Вариант 2: Через @getmyid_bot
+1. Напишите боту [@getmyid_bot](https://t.me/getmyid_bot)
+2. Он покажет ваш ID
+
+### Вариант 3: Через команду /myid (если добавить в бота)
+Можно добавить команду в бот:
+```typescript
+bot.command("myid", async (ctx) => {
+  await ctx.reply(`Ваш Telegram ID: ${ctx.from?.id}`);
+});
+```
+
+После получения ID всех пользователей, добавьте их в `.env`:
+```bash
+SUBSCRIBER_CHAT_IDS="6788213640,1234567890,9876543210"
+```
+
+**Важно:** Первый ID в списке — главный админ, который получает детальные отчёты о работе pipeline.

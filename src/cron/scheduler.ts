@@ -14,7 +14,8 @@ const SUBSCRIBER_CHAT_IDS = process.env.SUBSCRIBER_CHAT_IDS
 const ADMIN_CHAT_ID = SUBSCRIBER_CHAT_IDS[0];
 
 const CRON_ENABLED = process.env.CRON_ENABLED !== "false"; 
-const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "50 6 * * 2,4"; // По умолчанию: вт и чт в 9:50 MSK (6:50 UTC)
+// ВРЕМЕННО: разовый запуск 08.09.2026 в 08:00 UTC (11:00 MSK). Вернуть на "50 6 * * 2,4"
+const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "0 8 8 9 *";
 
 
 function createCronContext(chatId: string): Context {

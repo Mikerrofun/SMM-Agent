@@ -2,10 +2,58 @@ import type { Context } from "grammy";
 import { runFullPipeline } from "../../services/pipeline/pipelineService";
 import type { PipelineResult, PipelineCommandResult } from "../../services/pipeline/pipelineService.types";
 import { formatPipelineReport, formatDuration, pluralizeNewIdea } from "../../shared/utils/pipelineReportFormatter";
+import { withRetry } from "../../shared/utils/retry";
+import {
+  isPipelineRunning,
+  setIsPipelineRunning,
+  PIPELINE_TIMEOUT_MS,
+  STATUS_EDIT_INTERVAL_MS,
+  TELEGRAM_EDIT_RETRY,
+  type StatusMessage,
+} from "./runPipeline.types";
 
-let isPipelineRunning = false;
-const PIPELINE_TIMEOUT_MS = 30 * 60 * 1000;
+/**
+ * Редактирует существующее сообщение с автоматическими повторными попытками.
+ * Используется для обновления статуса во время выполнения пайплайна.
+ */
+async function editStatusMessageWithRetry(
+  ctx: Context,
+  statusMessage: StatusMessage,
+  text: string,
+  options?: { parse_mode?: "HTML" }
+): Promise<void> {
+  await withRetry(
+    () =>
+      ctx.api.editMessageText(
+        statusMessage.chat.id,
+        statusMessage.message_id,
+        text,
+        options
+      ),
+    TELEGRAM_EDIT_RETRY
+  );
+}
 
+/**
+ * Пытается отредактировать сообщение, при неудаче отправляет новое.
+ * Используется для финального отчёта и сообщений об ошибках,
+ */
+async function editOrSend(
+  ctx: Context,
+  statusMessage: StatusMessage | null,
+  text: string,
+  options?: { parse_mode?: "HTML" }
+): Promise<void> {
+  if (statusMessage) {
+    try {
+      await editStatusMessageWithRetry(ctx, statusMessage, text, options);
+      return;
+    } catch (error) {
+      console.error("Failed to edit status message, falling back to sendMessage:", error);
+    }
+  }
+  await ctx.reply(text, options);
+}
 
 export function logPipelineStats(result: PipelineResult, duration: number): void {
   console.log("\n📊 СТАТИСТИКА ВЫПОЛНЕНИЯ:");
@@ -39,7 +87,8 @@ export function logPipelineStats(result: PipelineResult, duration: number): void
 }
 
 export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCommandResult> {
-  let statusMessage: { chat: { id: number }, message_id: number } | null = null;
+  let statusMessage: StatusMessage | null = null;
+  let lastStatusEditAt = 0;
 
   try {
     if (isPipelineRunning) {
@@ -49,7 +98,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
       return { success: false, error: "Pipeline already running" };
     }
 
-    isPipelineRunning = true;
+    setIsPipelineRunning(true);
 
     statusMessage = await ctx.reply(
       "🚀 Запуск пайплайна генерации идей...\n\n" +
@@ -59,14 +108,20 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
     const startTime = Date.now();
 
     const pipelinePromise = runFullPipeline(async (stage, status) => {
+      if (!statusMessage) return;
+
+      // Троттлинг: редактируем не чаще раза в STATUS_EDIT_INTERVAL_MS,
+      // чтобы не упереться в rate limit Telegram
+      const now = Date.now();
+      if (now - lastStatusEditAt < STATUS_EDIT_INTERVAL_MS) return;
+      lastStatusEditAt = now;
+
       try {
-        if (statusMessage) {
-          await ctx.api.editMessageText(
-            statusMessage.chat.id,
-            statusMessage.message_id,
-            `🚀 Пайплайн генерации идей\n\n${status}`
-          );
-        }
+        await editStatusMessageWithRetry(
+          ctx,
+          statusMessage,
+          `🚀 Пайплайн генерации идей\n\n${status}`
+        );
       } catch (error) {
         console.error("Failed to update status message:", error);
       }
@@ -86,14 +141,8 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
 
     const finalMessage = formatPipelineReport(result, duration);
 
-    if (statusMessage) {
-      await ctx.api.editMessageText(
-        statusMessage.chat.id,
-        statusMessage.message_id,
-        finalMessage,
-        { parse_mode: "HTML" }
-      );
-    }
+    // Финальный отчёт: withRetry + fallback на sendMessage, чтобы он точно пришёл
+    await editOrSend(ctx, statusMessage, finalMessage, { parse_mode: "HTML" });
 
     return { success: true, data: result };
 
@@ -108,33 +157,17 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
         : errorMessage;
 
       const errorMsg = 
-        "❌ <b>Ошибка выполнения пайплайна</b>\n\n" +
+        "❌ Ошибка выполнения пайплайна\n\n" +
         shortError + "\n\n" +
         "Проверьте логи для подробностей.";
 
-      if (statusMessage) {
-        await ctx.api.editMessageText(
-          statusMessage.chat.id,
-          statusMessage.message_id,
-          errorMsg
-        );
-      } else {
-        await ctx.reply(errorMsg);
-      }
+      await editOrSend(ctx, statusMessage, errorMsg);
     } catch (replyError) {
       console.error("Failed to send error message:", replyError);
       
       try {
         const fallbackMsg = "❌ Ошибка выполнения пайплайна. Проверьте логи.";
-        if (statusMessage) {
-          await ctx.api.editMessageText(
-            statusMessage.chat.id,
-            statusMessage.message_id,
-            fallbackMsg
-          );
-        } else {
-          await ctx.reply(fallbackMsg);
-        }
+        await editOrSend(ctx, statusMessage, fallbackMsg);
       } catch (fallbackError) {
         console.error("Failed to send fallback message:", fallbackError);
       }
@@ -142,7 +175,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
 
     return { success: false, error: errorMessage };
   } finally {
-    isPipelineRunning = false;
+    setIsPipelineRunning(false);
   }
 }
 

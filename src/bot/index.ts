@@ -6,6 +6,7 @@ import {
   handleGeneratePostCallback,
   handleRunPipelineCommand,
   handleRunPipelineCallback,
+  handleLastRunCommand,
   handleTranscriptCommand,
   handlePdfDocument,
   handleTranscriptMoreCallback,
@@ -44,6 +45,7 @@ bot.command("help", async (ctx) => {
     "/help — показать это сообщение\n" +
     "/ideas — получить новые идеи для постов\n" +
     "/run_pipeline — запустить генерацию идей\n" +
+    "/last_run — отчёт по последнему запуску пайплайна\n" +
     "/transcript_post — создать посты из транскрипции встречи\n" +
     "/status — статус системы\n\n" +
     "<b>Как это работает?</b>\n\n" +
@@ -56,6 +58,7 @@ bot.command("help", async (ctx) => {
 
 bot.command("ideas", handleIdeasCommand);
 bot.command("run_pipeline", handleRunPipelineCommand);
+bot.command("last_run", handleLastRunCommand);
 bot.command("transcript_post", handleTranscriptCommand);
 
 // Срабатывает на все документы; внутри проверяется, ждём ли мы PDF от юзера

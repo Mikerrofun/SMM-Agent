@@ -4,11 +4,9 @@ import { bot } from "../bot";
 import { handleRunPipelineCommand, logPipelineStats } from "../bot/commands/runPipeline";
 import type { PipelineResult } from "../services/pipeline/pipelineService.types";
 import { formatPipelineReport } from "../shared/utils/pipelineReportFormatter";
+import { getSubscriberChatIds } from "../shared/telegram/subscribers";
 
-const SUBSCRIBER_CHAT_IDS = process.env.SUBSCRIBER_CHAT_IDS
-  ?.split(',')
-  .map(id => id.trim())
-  .filter(id => id.length > 0) || [];
+const SUBSCRIBER_CHAT_IDS = getSubscriberChatIds();
 
 // Первый ID в списке — главный админ, который получает детальные отчёты о пайплайне
 const ADMIN_CHAT_ID = SUBSCRIBER_CHAT_IDS[0];

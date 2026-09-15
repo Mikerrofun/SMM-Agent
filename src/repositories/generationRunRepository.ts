@@ -12,6 +12,15 @@ export async function getLastSuccessfulRun(): Promise<GenerationRun | null> {
   });
 }
 
+/**
+ * Возвращает самый новый запуск пайплайна (любого статуса).
+ */
+export async function getLatestRun(): Promise<GenerationRun | null> {
+  return prisma.generationRun.findFirst({
+    orderBy: [{ startedAt: 'desc' }],
+  });
+}
+
 export async function determineCutoffDate(lookbackDays: number): Promise<Date> {
   const lastRun = await getLastSuccessfulRun();
   

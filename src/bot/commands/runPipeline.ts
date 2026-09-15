@@ -3,17 +3,19 @@ import { runFullPipeline } from "../../services/pipeline/pipelineService";
 import type { PipelineResult, PipelineCommandResult } from "../../services/pipeline/pipelineService.types";
 import { formatPipelineReport, formatDuration, pluralizeNewIdea } from "../../shared/utils/pipelineReportFormatter";
 import { withRetry } from "../../shared/utils/retry";
+import {
+  isPipelineRunning,
+  setIsPipelineRunning,
+  PIPELINE_TIMEOUT_MS,
+  STATUS_EDIT_INTERVAL_MS,
+  TELEGRAM_EDIT_RETRY,
+  type StatusMessage,
+} from "./runPipeline.types";
 
-let isPipelineRunning = false;
-const PIPELINE_TIMEOUT_MS = 30 * 60 * 1000;
-
-// Telegram ограничивает частоту editMessageText (~1 раз в 2-3 секунды на сообщение),
-// иначе ловим 429 Too Many Requests
-const STATUS_EDIT_INTERVAL_MS = 3000;
-const TELEGRAM_EDIT_RETRY = { maxAttempts: 4, delayMs: 3000, backoffFactor: 1.5 } as const;
-
-type StatusMessage = { chat: { id: number }; message_id: number };
-
+/**
+ * Редактирует существующее сообщение с автоматическими повторными попытками.
+ * Используется для обновления статуса во время выполнения пайплайна.
+ */
 async function editStatusMessageWithRetry(
   ctx: Context,
   statusMessage: StatusMessage,
@@ -33,8 +35,8 @@ async function editStatusMessageWithRetry(
 }
 
 /**
- * Пытается отредактировать статусное сообщение, при неудаче — отправляет новое.
- * Гарантирует, что финальный отчёт дойдёт до чата даже при устойчивом 429.
+ * Пытается отредактировать сообщение, при неудаче отправляет новое.
+ * Используется для финального отчёта и сообщений об ошибках,
  */
 async function editOrSend(
   ctx: Context,
@@ -96,7 +98,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
       return { success: false, error: "Pipeline already running" };
     }
 
-    isPipelineRunning = true;
+    setIsPipelineRunning(true);
 
     statusMessage = await ctx.reply(
       "🚀 Запуск пайплайна генерации идей...\n\n" +
@@ -173,7 +175,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
 
     return { success: false, error: errorMessage };
   } finally {
-    isPipelineRunning = false;
+    setIsPipelineRunning(false);
   }
 }
 

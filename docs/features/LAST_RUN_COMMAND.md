@@ -31,13 +31,14 @@
 ### 2.1 Троттлинг + withRetry для редактирования статуса
 
 ```typescript
-// src/bot/commands/runPipeline.ts
+// src/bot/commands/runPipeline.types.ts — константы и типы вынесены отдельным файлом
 
 // Telegram ограничивает частоту editMessageText (~1 раз в 2-3 секунды на сообщение),
 // иначе ловим 429 Too Many Requests
-const STATUS_EDIT_INTERVAL_MS = 3000;
-const TELEGRAM_EDIT_RETRY = { maxAttempts: 4, delayMs: 3000, backoffFactor: 1.5 } as const;
+export const STATUS_EDIT_INTERVAL_MS = 3000;
+export const TELEGRAM_EDIT_RETRY = { maxAttempts: 4, delayMs: 3000, backoffFactor: 1.5 } as const;
 
+// src/bot/commands/runPipeline.ts — сама обёртка
 async function editStatusMessageWithRetry(ctx, statusMessage, text, options?) {
   await withRetry(
     () => ctx.api.editMessageText(
@@ -174,6 +175,8 @@ src/bot/commands/index.ts ← экспорт handleLastRunCommand
 | `src/shared/telegram/subscribers.ts` | **Новый.** `getSubscriberChatIds`, `broadcastToSubscribers` |
 | `src/repositories/generationRunRepository.ts` | + `getLatestRun()` |
 | `src/bot/commands/runPipeline.ts` | Троттлинг 3 сек, `editStatusMessageWithRetry`, `editOrSend` |
+| `src/bot/commands/runPipeline.types.ts` | **Новый** (рефакторинг). Константы `STATUS_EDIT_INTERVAL_MS`, `TELEGRAM_EDIT_RETRY`, `PIPELINE_TIMEOUT_MS`, флаг `isPipelineRunning` + сеттер, тип `StatusMessage` |
+| `src/bot/utils/formatters.ts` | **Новый** (рефакторинг). `STATUS_LABELS`, `formatMoscowTime` — общие для `lastRun.ts` |
 | `src/cron/scheduler.ts` | Переведён на `getSubscriberChatIds()` |
 | `src/bot/index.ts`, `src/bot/commands/index.ts` | Регистрация команды и /help |
 
@@ -182,5 +185,5 @@ src/bot/commands/index.ts ← экспорт handleLastRunCommand
 ## 6. Ограничения
 
 - В отчёте `/last_run` нет статистики парсинга (каналы/дубли) — её нет в модели `GenerationRun`, там хранятся только посты/идеи/статусы. Полная статистика — только в живом отчёте `/run_pipeline`.
-- Если прогон ещё `RUNNING`, команда покажет его с длительностью «до текущего момента» (`finishedAt ?? now`).
+- Если прогон ещё `RUNNING` (`finishedAt` пуст), вместо длительности показывается «⏱ Прошло времени» — время от `startedAt` до текущего момента.
 - `broadcastToSubscribers` шлёт последовательно — при большом списке подписчиков учитывай rate limit Telegram на отправку (~30 сообщений/мин на чат).

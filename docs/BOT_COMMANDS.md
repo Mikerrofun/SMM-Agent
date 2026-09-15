@@ -107,6 +107,35 @@ This document describes the Telegram bot commands implemented for the SMM Agent 
 - Comprehensive error handling
 - Graceful Telegram client disconnection
 
+**Rate Limit Protection (429 fix):**
+- Progress updates throttled to once per 3 seconds (`STATUS_EDIT_INTERVAL_MS`)
+- All `editMessageText` calls wrapped in `withRetry` (4 attempts, 3s delay, backoff 1.5)
+- Final report sent via `editOrSend()`: edit fails → fallback to `sendMessage`, so the report always reaches the chat
+
+---
+
+### `/last_run`
+**Description:** Shows a report for the most recent pipeline run (any status) from the `GenerationRun` table
+
+**Handler:** `src/bot/commands/lastRun.ts`
+
+**Use cases:**
+- The final report from `/run_pipeline` or cron was lost (e.g. Telegram 429) — restore it manually
+- Check stats of a previous run at any time
+
+**Behavior:**
+1. Fetches the newest `GenerationRun` from DB (`getLatestRun()`, ordered by `startedAt desc`)
+2. If no runs exist: "📭 Запусков пайплайна ещё не было. Запустите /run_pipeline."
+3. Formats the report: status (RUNNING/SUCCESS/FAILED), start/finish time (MSK), duration, processed posts, generated/accepted/rejected ideas, OpenAI requests
+4. Sends the report to **all subscribers** from `SUBSCRIBER_CHAT_IDS`:
+   - The chat where the command was typed gets a direct reply (no duplicate if it's also a subscriber)
+   - Everyone else gets it via `broadcastToSubscribers()`
+   - If `SUBSCRIBER_CHAT_IDS` is empty — replies only to the current chat
+
+**Note:** Parsing stats (channels/duplicates) are not included — they are not stored in `GenerationRun`. Full stats are only in the live `/run_pipeline` report.
+
+Details: [features/LAST_RUN_COMMAND.md](features/LAST_RUN_COMMAND.md)
+
 ---
 
 ### `/transcript_post`
@@ -161,7 +190,11 @@ src/bot/
 └── commands/
     ├── index.ts                # Commands export
     ├── ideas.ts                # /ideas command handler
-    └── runPipeline.ts          # /run_pipeline command handler
+    ├── runPipeline.ts          # /run_pipeline command handler
+    └── lastRun.ts              # /last_run command handler
+
+src/shared/telegram/
+└── subscribers.ts              # SUBSCRIBER_CHAT_IDS parsing + broadcast helper
 
 src/services/pipeline/
 ├── pipelineService.ts          # Pipeline orchestration

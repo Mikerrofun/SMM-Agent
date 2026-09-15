@@ -59,6 +59,7 @@ npm run dev
 - [docs/COMPETITORS_PARSER.md](docs/COMPETITORS_PARSER.md) — парсер каналов конкурентов (25 каналов).
 - [docs/MAIN_IDEA_EXTRACTION.md](docs/MAIN_IDEA_EXTRACTION.md) — извлечение главной мысли (mainIdea) через LLM.
 - [docs/features/TRANSCRIPT_POST_GENERATION.md](docs/features/TRANSCRIPT_POST_GENERATION.md) — генерация постов из транскрипций встреч (`/transcript_post`).
+- [docs/features/LAST_RUN_COMMAND.md](docs/features/LAST_RUN_COMMAND.md) — команда `/last_run` (отчёт по последнему прогону) и фикс потери отчёта из-за Telegram 429.
 
 
 

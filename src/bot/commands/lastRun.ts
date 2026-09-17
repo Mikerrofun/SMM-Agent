@@ -56,15 +56,10 @@ export async function handleLastRunCommand(ctx: Context): Promise<void> {
     const subscribers = getSubscriberChatIds();
     const requesterChatId = ctx.chat?.id?.toString();
 
-    if (subscribers.length === 0) {
-      await ctx.reply(report, { parse_mode: "HTML" });
-      return;
-    }
+    // Инициатор всегда получает отчёт напрямую в чат, откуда вызвал команду
+    await ctx.reply(report, { parse_mode: "HTML" });
 
-    if (!requesterChatId || !subscribers.includes(requesterChatId)) {
-      await ctx.reply(report, { parse_mode: "HTML" });
-    }
-
+    // Остальным подписчикам — рассылкой (инициатор исключён, чтобы не было дубля)
     const targets = subscribers.filter((id) => id !== requesterChatId);
     if (targets.length > 0) {
       const { sent, failed } = await broadcastToSubscribers(

@@ -6,7 +6,7 @@
  */
 
 import { prisma } from '../db/client';
-import type { SimilarityMatch, DuplicateSource } from '../services/shared/deduplication.types';
+import type { SimilarityMatch, DuplicateOfType } from '../services/shared/deduplication.types';
 import type { TranscriptPostStatus } from '../shared/types/transcript.types';
 import type {
   CreateTranscriptPostInput,
@@ -48,7 +48,7 @@ export async function updateEmbedding(
  */
 export async function markAsDuplicate(
   id: string,
-  duplicateOfType: DuplicateSource,
+  duplicateOfType: DuplicateOfType,
   duplicateOfId: string,
   similarity: number
 ): Promise<void> {

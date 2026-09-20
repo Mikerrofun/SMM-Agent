@@ -16,15 +16,18 @@ import { findSimilarIdeasForTranscript } from '../../repositories/ideaRepository
 import { withRetry } from '../../shared/utils/retry';
 import { DEDUPLICATION_RETRY_CONFIG } from '../shared/deduplication.config';
 import { resolveBestMatch } from '../shared/similarityResolver';
+import { isNataliaRelevanceRejected } from '../shared/relevanceFilter';
 import { DeduplicationError } from './errors';
 import type {
   DuplicationResult,
   EmbeddingCheckResult,
 } from '../shared/deduplication.types';
+import type { DuplicateSource } from '../shared/deduplication.types';
 
 
 export async function checkPostDuplication(
-  embedding: number[]
+  embedding: number[],
+  targetSource: DuplicateSource = 'transcriptPost'
 ): Promise<DuplicationResult> {
   const [nataliaMatches, transcriptMatches, ideaMatches] = await Promise.all([
     findSimilarNataliaPosts(embedding, 0),
@@ -32,7 +35,7 @@ export async function checkPostDuplication(
     findSimilarIdeasForTranscript(embedding, 0),
   ]);
 
-  const { maxSimilarity, source, matchedId } = resolveBestMatch('transcriptPost', [
+  const { maxSimilarity, source, matchedId, nataliaSimilarity } = resolveBestMatch(targetSource, [
     { source: 'nataliaPost', matches: nataliaMatches },
     { source: 'transcriptPost', matches: transcriptMatches },
     { source: 'idea', matches: ideaMatches },
@@ -45,12 +48,15 @@ export async function checkPostDuplication(
     maxSimilarity,
     source: isDuplicate ? source : null,
     matchedId: isDuplicate ? matchedId : null,
+    nataliaSimilarity,
+    relevanceRejected: isNataliaRelevanceRejected(nataliaSimilarity, isDuplicate),
   };
 }
 
 
 export async function generateAndCheckEmbedding(
-  mainIdea: string
+  mainIdea: string,
+  targetSource: DuplicateSource = 'transcriptPost'
 ): Promise<EmbeddingCheckResult> {
   try {
     const embedding = await withRetry(
@@ -59,7 +65,7 @@ export async function generateAndCheckEmbedding(
     );
 
     const result = await withRetry(
-      () => checkPostDuplication(embedding),
+      () => checkPostDuplication(embedding, targetSource),
       DEDUPLICATION_RETRY_CONFIG
     );
 

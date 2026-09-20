@@ -13,6 +13,13 @@ export const DEDUPLICATION_THRESHOLDS = {
   sameType: 0.75,
 } as const;
 
+/**
+ * Минимальная допустимая схожесть с постами канала Натальи.
+ * Контент, который не дубль, но схожее этого порога, отбраковывается
+ * с причиной 'natalia_relevance' (слишком близко к уже опубликованному).
+ */
+export const MIN_NATALIA_SIMILARITY = 0.5;
+
 
 export const DEDUPLICATION_RETRY_CONFIG: RetryConfig = {
   maxAttempts: 3,

@@ -74,12 +74,14 @@ async function generateSinglePost(
         postIndex,
         attempt,
         similarity: Number(dedupResult.maxSimilarity.toFixed(4)),
+        nataliaSimilarity: Number(dedupResult.nataliaSimilarity.toFixed(4)),
         isDuplicate: dedupResult.isDuplicate,
+        relevanceRejected: dedupResult.relevanceRejected,
         source: dedupResult.source,
         matchedId: dedupResult.matchedId,
       });
 
-      if (!dedupResult.isDuplicate) {
+      if (!dedupResult.isDuplicate && !dedupResult.relevanceRejected) {
         // Уникальный пост: проставляем статус SENT
         await updateStatus(post.id, 'SENT');
 
@@ -95,8 +97,16 @@ async function generateSinglePost(
         return sentPost;
       }
 
-      // Дубль: помечаем как DUPLICATE с информацией об источнике
-      if (dedupResult.source && dedupResult.matchedId) {
+      if (dedupResult.relevanceRejected) {
+        // Не дубль, но слишком похож на канал Натальи — отбраковка по релевантности
+        await markAsDuplicate(
+          post.id,
+          'natalia_relevance',
+          '',
+          dedupResult.nataliaSimilarity
+        );
+      } else if (dedupResult.source && dedupResult.matchedId) {
+        // Дубль: помечаем как DUPLICATE с информацией об источнике
         await markAsDuplicate(
           post.id,
           dedupResult.source,

@@ -9,6 +9,7 @@ import { findSimilarPostsForIdeas } from '../../repositories/transcriptPostRepos
 import { withRetry } from '../../shared/utils/retry';
 import { DEDUPLICATION_RETRY_CONFIG } from '../shared/deduplication.config';
 import { resolveBestMatch } from '../shared/similarityResolver';
+import { isNataliaRelevanceRejected, NATALIA_RELEVANCE_REASON } from '../shared/relevanceFilter';
 import type { DeduplicationStats, DeduplicateIdeasOptions } from '../shared/deduplication.types';
 
 export async function deduplicateIdeas(
@@ -23,6 +24,7 @@ export async function deduplicateIdeas(
     duplicatesWithIdeas: 0,
     duplicatesWithNataliaPosts: 0,
     duplicatesWithTranscriptPosts: 0,
+    duplicatesWithNataliaChannelPosts: 0,
     failed: 0,
     failedItems: [],
   };
@@ -47,7 +49,7 @@ export async function deduplicateIdeas(
              findSimilarPostsForIdeas(embeddingArray, 0),
           ]);
         
-          const { maxSimilarity, source, matchedId } = resolveBestMatch('idea', [
+          const { maxSimilarity, source, matchedId, nataliaSimilarity } = resolveBestMatch('idea', [
             { source: 'idea', matches: ideaMatches },
             { source: 'nataliaPost', matches: nataliaMatches },
             { source: 'transcriptPost', matches: transcriptMatches },
@@ -70,7 +72,19 @@ export async function deduplicateIdeas(
             stats.duplicatesWithNataliaPosts++;
           } else if (source === 'transcriptPost') {
             stats.duplicatesWithTranscriptPosts++;
+          } else if (source === 'nataliaChannelPost') {
+            stats.duplicatesWithNataliaChannelPosts++;
           }
+        } else if (isNataliaRelevanceRejected(nataliaSimilarity, isDuplicate)) {
+          // Идея не дубль, но слишком похожа на канал Натальи — отбраковка по релевантности
+          await markAsDuplicate(
+            idea.id,
+            NATALIA_RELEVANCE_REASON,
+            '',
+            nataliaSimilarity
+          );
+
+          stats.duplicates++;
         } else {
           if (maxSimilarity > 0) {
             await updateMaxSimilarity(idea.id, maxSimilarity);

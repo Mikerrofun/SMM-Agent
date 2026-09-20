@@ -9,6 +9,7 @@ import type { RetryConfig } from '../../shared/utils/retry';
  */
 export const DEDUPLICATION_THRESHOLDS = {
   nataliaPost: 0.75,
+  nataliaChannelPost: 0.75,
   crossContent: 0.80,
   sameType: 0.75,
 } as const;

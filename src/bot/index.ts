@@ -10,6 +10,8 @@ import {
   handleTranscriptCommand,
   handlePdfDocument,
   handleTranscriptMoreCallback,
+  handleNataliaChannelPostCommand,
+  handleNataliaChannelMoreCallback,
   handleRegeneratePostCallback,
   handleRegeneratePostFeedbackCallback,
   handleFeedbackMessage,
@@ -47,6 +49,7 @@ bot.command("help", async (ctx) => {
     "/run_pipeline — запустить генерацию идей\n" +
     "/last_run — отчёт по последнему запуску пайплайна\n" +
     "/transcript_post — создать посты из транскрипции встречи\n" +
+    "/natalia_channel_post — создать посты из тем канала Натальи\n" +
     "/status — статус системы\n\n" +
     "<b>Как это работает?</b>\n\n" +
     "1️⃣ Используй /run_pipeline для запуска анализа каналов конкурентов и генерации идей\n" +
@@ -60,6 +63,7 @@ bot.command("ideas", handleIdeasCommand);
 bot.command("run_pipeline", handleRunPipelineCommand);
 bot.command("last_run", handleLastRunCommand);
 bot.command("transcript_post", handleTranscriptCommand);
+bot.command("natalia_channel_post", handleNataliaChannelPostCommand);
 
 // Срабатывает на все документы; внутри проверяется, ждём ли мы PDF от юзера
 bot.on("message:document", handlePdfDocument);
@@ -69,10 +73,11 @@ bot.command("status", async (ctx) => {
 });
 
 bot.callbackQuery(/^generate_post:/, handleGeneratePostCallback);
-bot.callbackQuery(/^regenerate_(idea|transcript)_post:/, handleRegeneratePostCallback);
-bot.callbackQuery(/^regenerate_(idea|transcript)_post_feedback:/, handleRegeneratePostFeedbackCallback);
+bot.callbackQuery(/^regenerate_(idea|transcript|natalia_channel)_post:/, handleRegeneratePostCallback);
+bot.callbackQuery(/^regenerate_(idea|transcript|natalia_channel)_post_feedback:/, handleRegeneratePostFeedbackCallback);
 bot.callbackQuery("run_pipeline", handleRunPipelineCallback);
 bot.callbackQuery(/^transcript_more:/, handleTranscriptMoreCallback);
+bot.callbackQuery(/^natalia_channel_more:/, handleNataliaChannelMoreCallback);
 
 // ВАЖНО: handler для фидбека должен быть последним, чтобы не перехватывать команды
 bot.on("message:text", handleFeedbackMessage);

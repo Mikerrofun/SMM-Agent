@@ -10,6 +10,10 @@ import {
   getTranscriptPostById,
   updateTranscriptPostText,
 } from '../../repositories/transcriptPostRepository';
+import {
+  getNataliaChannelPostById,
+  updateNataliaChannelPostText,
+} from '../../repositories/nataliaChannelPostRepository';
 
 import { withRetry } from '../../shared/utils/retry';
 
@@ -17,6 +21,12 @@ import type {
   PostType,
   PostRegenerationResult,
 } from './postRegenerationService.types';
+
+const POST_TYPE_LABELS: Record<PostType, string> = {
+  generated: 'GeneratedPost',
+  transcript: 'TranscriptPost',
+  nataliaChannel: 'NataliaChannelPost',
+};
 
 export async function regeneratePostUniversal(
   postId: string,
@@ -27,11 +37,13 @@ export async function regeneratePostUniversal(
     const post =
       postType === 'generated'
         ? await getGeneratedPostById(postId)
-        : await getTranscriptPostById(postId);
-    
+        : postType === 'transcript'
+          ? await getTranscriptPostById(postId)
+          : await getNataliaChannelPostById(postId);
+
     if (!post) {
       throw new Error(
-        `${postType === 'generated' ? 'GeneratedPost' : 'TranscriptPost'} with ID ${postId} not found`
+        `${POST_TYPE_LABELS[postType]} with ID ${postId} not found`
       );
     }
 
@@ -62,8 +74,10 @@ export async function regeneratePostUniversal(
         newText,
         shouldSaveMainIdea ? (mainIdea as string) : undefined
       );
-    } else {
+    } else if (postType === 'transcript') {
       await updateTranscriptPostText(postId, newText);
+    } else {
+      await updateNataliaChannelPostText(postId, newText);
     }
 
     return {
@@ -100,4 +114,11 @@ export async function regenerateTranscriptPost(
   feedback?: string
 ): Promise<PostRegenerationResult> {
   return regeneratePostUniversal(postId, 'transcript', feedback);
+}
+
+export async function regenerateNataliaChannelPost(
+  postId: string,
+  feedback?: string
+): Promise<PostRegenerationResult> {
+  return regeneratePostUniversal(postId, 'nataliaChannel', feedback);
 }

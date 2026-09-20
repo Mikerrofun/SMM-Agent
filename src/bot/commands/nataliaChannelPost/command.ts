@@ -1,11 +1,12 @@
 /**
  * Хендлер команды /natalia_channel_post — запускает флоу генерации постов
- * из главных идей канала Натальи. PDF не нужен, команда запускается сразу.
+ * из главных идей канала Натальи
  */
 
 import type { Context } from 'grammy';
-import { processNataliaChannelPosts } from '../../../services/nataliaChannelPost/nataliaChannelPostService';
+import { processNataliaChannelPosts } from '../../../services/nataliaChannelPost';
 import { finishAndShowButton } from './renderer';
+import type { StatusMessageId } from '../../../shared/types/nataliaChannelPost.types';
 
 /**
  * Map для защиты от повторного запуска, пока идёт генерация.
@@ -28,7 +29,7 @@ export async function handleNataliaChannelPostCommand(
 
   runningForUser.set(userId, true);
 
-  let statusMessageId: number | undefined;
+  let statusMessageId: StatusMessageId;
 
   try {
     const statusMessage = await ctx.reply(

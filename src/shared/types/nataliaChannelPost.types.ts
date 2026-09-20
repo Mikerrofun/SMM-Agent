@@ -22,3 +22,10 @@ export interface CreateNataliaChannelPostInput {
   mainIdea: string;
   attemptNumber: number;
 }
+
+/**
+ * ID временного статусного сообщения в Telegram
+ * undefined = сообщение еще не отправлено
+ * number = ID отправленного сообщения (для последующего удаления)
+ */
+export type StatusMessageId = number | undefined;

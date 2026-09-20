@@ -34,6 +34,7 @@ import type {
   CreateNataliaChannelPostInput,
   NataliaChannelPostData,
 } from '../../shared/types/nataliaChannelPost.types';
+import type { NataliaChannelProcessingResult } from './nataliaChannelPost.types';
 import {
   AI_RETRY_CONFIG,
   MAX_ATTEMPTS_PER_POST,
@@ -73,13 +74,6 @@ function buildDeps(): PostGenerationDeps<
     }),
     logPrefix: '[NataliaChannelPost]',
   };
-}
-
-export interface NataliaChannelProcessingResult {
-  requestedPosts: number;
-  posts: NataliaChannelPostData[];
-  stats: PostGenerationStats;
-  errors: string[];
 }
 
 export async function processNataliaChannelPosts(): Promise<NataliaChannelProcessingResult> {

@@ -81,10 +81,8 @@ export interface PostGenerationDeps<
   repository: PostRepositoryAdapter<TPost, TCreateInput>;
   config: PostGenerationConfig;
   checkDuplication: DuplicationChecker;
-  /** Генерация текста поста (контекст источника замыкается снаружи). */
   generateText: (usedMainIdeas: string[]) => Promise<string>;
   extractMainIdea: (postText: string) => Promise<string>;
-  /** Сборка input для repository.create. */
   createInput: (params: {
     text: string;
     mainIdea: string;

@@ -84,7 +84,7 @@ export async function generateUniquePost<
       }
 
       if (dedupResult.relevanceRejected) {
-        // Не дубль, но слишком похож на канал Натальи — отбраковка по релевантности
+        // Не дубль, но слишком не похож на канал Натальи — отбраковка по релевантности
         await repository.markAsDuplicate(
           post.id,
           NATALIA_RELEVANCE_REASON,
@@ -101,7 +101,6 @@ export async function generateUniquePost<
         );
       }
 
-      // Переходим к следующей попытке
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push(`post ${postIndex}, attempt ${attempt}: ${message}`);

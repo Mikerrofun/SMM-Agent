@@ -1,12 +1,7 @@
 import type { SimilaritySource, ResolvedSimilarity } from './similarityResolver.types';
 import type { DuplicateSource } from './deduplication.types';
 import { getThreshold } from './thresholdResolver';
-
-/** Источники, схожесть с которыми трактуются как «похожесть на канал Натальи». */
-const NATALIA_SOURCES: ReadonlySet<DuplicateSource> = new Set([
-  'nataliaPost',
-  'nataliaChannelPost',
-]);
+import { NATALIA_SOURCES } from './similarityResolver.config';
 
 export function resolveBestMatch(
   targetSource: DuplicateSource,

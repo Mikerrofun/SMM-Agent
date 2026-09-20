@@ -101,6 +101,22 @@ model TranscriptPost {
   @@index([transcriptId, status])
 }
 
+model NataliaChannelPost {
+  id              String                 @id @default(cuid())
+  text            String
+  mainIdea        String
+  embedding       Unsupported("vector")?
+  similarity      Float?
+  duplicateOfType String?
+  duplicateOfId   String?
+  attemptNumber   Int                    @default(1)
+  createdAt       DateTime               @default(now())
+  status          TranscriptPostStatus   @default(REJECTED)
+
+  @@index([status])
+  @@index([duplicateOfId])
+}
+
 model GenerationRun {
   id             String    @id @default(cuid())
   startedAt      DateTime  @default(now())

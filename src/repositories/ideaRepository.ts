@@ -1,7 +1,7 @@
 import { prisma } from '../db/client';
 import type { CreateIdeaInput, IdeaProcessItem, IdeaStatus, IdeaWithEmbedding } from '../shared/types/idea.types';
 import type { IdeaModel } from '../db/generated/models/Idea';
-import type { SimilarityMatch, DuplicateSource } from '../services/shared/deduplication.types';
+import type { SimilarityMatch, DuplicateOfType } from '../services/shared/deduplication.types';
 
 
 export async function getUnprocessedCompetitorPosts(): Promise<IdeaProcessItem[]> {
@@ -203,7 +203,7 @@ export async function updateMaxSimilarity(
 
 export async function markAsDuplicate(
   ideaId: string,
-  duplicateOfType: DuplicateSource,
+  duplicateOfType: DuplicateOfType,
   duplicateOfId: string,
   similarity: number
 ): Promise<void> {

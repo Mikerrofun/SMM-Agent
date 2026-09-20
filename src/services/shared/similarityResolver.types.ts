@@ -9,4 +9,6 @@ export interface ResolvedSimilarity<TSource extends DuplicateSource = DuplicateS
   maxSimilarity: number;
   source: TSource | null;
   matchedId: string | null;
+  /** Максимальная similarity среди natalia-источников (NataliaPost, NataliaChannelPost). */
+  nataliaSimilarity: number;
 }

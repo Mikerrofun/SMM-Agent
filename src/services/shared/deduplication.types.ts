@@ -1,4 +1,13 @@
-export type DuplicateSource = 'idea' | 'nataliaPost' | 'transcriptPost';
+export type DuplicateSource = 'idea' | 'nataliaPost' | 'transcriptPost' | 'nataliaChannelPost';
+
+/**
+ * Причина отбраковки по релевантности: контент не дубль,
+ * но слишком похож на посты канала Натальи (nataliaSimilarity < MIN_NATALIA_SIMILARITY).
+ */
+export type RelevanceRejectionReason = 'natalia_relevance';
+
+/** Тип источника дубля: либо один из источников дедупликации, либо причина отбраковки по релевантности. */
+export type DuplicateOfType = DuplicateSource | RelevanceRejectionReason;
 
 export interface SimilarityMatch {
   readonly id: string;
@@ -11,6 +20,10 @@ export interface BaseDuplicationResult {
   maxSimilarity: number;
   source: DuplicateSource | null;
   matchedId: string | null;
+  /** Максимальная схожесть именно с постами канала Натальи (NataliaPost + NataliaChannelPost). */
+  nataliaSimilarity: number;
+  /** true — контент не дубль, но отбракован фильтром релевантности (nataliaSimilarity < MIN_NATALIA_SIMILARITY). */
+  relevanceRejected: boolean;
 }
 
 export type DuplicationResult = BaseDuplicationResult;
@@ -26,6 +39,7 @@ export interface DeduplicationStats {
   duplicatesWithIdeas: number;
   duplicatesWithNataliaPosts: number;
   duplicatesWithTranscriptPosts: number;
+  duplicatesWithNataliaChannelPosts: number;
   failed: number;
   failedItems: Array<{
     id: string;

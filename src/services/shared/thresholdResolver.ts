@@ -25,6 +25,10 @@ export function getThreshold(
     return DEDUPLICATION_THRESHOLDS.nataliaPost;
   }
 
+  if (checkAgainstSource === 'nataliaChannelPost') {
+    return DEDUPLICATION_THRESHOLDS.nataliaChannelPost;
+  }
+
   if (targetSource === 'idea' && checkAgainstSource === 'transcriptPost') {
     return DEDUPLICATION_THRESHOLDS.crossContent;
   }

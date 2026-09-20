@@ -41,6 +41,21 @@ export async function countPosts(): Promise<number> {
   return prisma.nataliaPost.count();
 }
 
+/**
+ * Все mainIdea постов Натальи одним запросом (~160 строк).
+ * Источник «тематической карты канала» для команды /natalia_channel_post.
+ * Данные всегда свежие: никаких файлов и кэшей.
+ */
+export async function getAllMainIdeas(): Promise<string[]> {
+  const rows = await prisma.nataliaPost.findMany({
+    where: { mainIdea: { not: '' } },
+    select: { mainIdea: true },
+    orderBy: { publishedAt: 'desc' },
+  });
+
+  return rows.map((row) => row.mainIdea);
+}
+
 
 export async function getPostsWithoutMainIdea(): Promise<
   Array<{ id: string; text: string }>

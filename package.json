@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
+    "test": "node --import tsx --test tests/similarityResolver.test.ts tests/relevanceFilter.test.ts tests/nataliaChannelContext.test.ts",
     "prisma:studio": "prisma studio",
     "bot": "tsx src/bot/run.ts",
     "bot:dev": "tsx watch src/bot/run.ts",

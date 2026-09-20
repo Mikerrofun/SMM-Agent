@@ -5,10 +5,12 @@ import {
   updateMaxSimilarity,
 } from '../../repositories/ideaRepository';
 import { findSimilarNataliaPosts } from '../../repositories/nataliaPostRepository';
+import { findSimilarPosts as findSimilarNataliaChannelPosts } from '../../repositories/nataliaChannelPostRepository';
 import { findSimilarPostsForIdeas } from '../../repositories/transcriptPostRepository';
 import { withRetry } from '../../shared/utils/retry';
 import { DEDUPLICATION_RETRY_CONFIG } from '../shared/deduplication.config';
 import { resolveBestMatch } from '../shared/similarityResolver';
+import { isNataliaRelevanceRejected, NATALIA_RELEVANCE_REASON } from '../shared/relevanceFilter';
 import type { DeduplicationStats, DeduplicateIdeasOptions } from '../shared/deduplication.types';
 
 export async function deduplicateIdeas(
@@ -23,6 +25,7 @@ export async function deduplicateIdeas(
     duplicatesWithIdeas: 0,
     duplicatesWithNataliaPosts: 0,
     duplicatesWithTranscriptPosts: 0,
+    duplicatesWithNataliaChannelPosts: 0,
     failed: 0,
     failedItems: [],
   };
@@ -41,15 +44,17 @@ export async function deduplicateIdeas(
       const embeddingArray = parseEmbeddingString(idea.embedding);
 
       await withRetry(async () => {
-          const [ideaMatches, nataliaMatches, transcriptMatches] = await Promise.all([
+          const [ideaMatches, nataliaMatches, nataliaChannelMatches, transcriptMatches] = await Promise.all([
              findSimilarIdeas(embeddingArray, 0, idea.id),
              findSimilarNataliaPosts(embeddingArray, 0),
+             findSimilarNataliaChannelPosts(embeddingArray, 0),
              findSimilarPostsForIdeas(embeddingArray, 0),
           ]);
-        
-          const { maxSimilarity, source, matchedId } = resolveBestMatch('idea', [
+
+          const { maxSimilarity, source, matchedId, nataliaSimilarity } = resolveBestMatch('idea', [
             { source: 'idea', matches: ideaMatches },
             { source: 'nataliaPost', matches: nataliaMatches },
+            { source: 'nataliaChannelPost', matches: nataliaChannelMatches },
             { source: 'transcriptPost', matches: transcriptMatches },
           ]);
 
@@ -70,7 +75,19 @@ export async function deduplicateIdeas(
             stats.duplicatesWithNataliaPosts++;
           } else if (source === 'transcriptPost') {
             stats.duplicatesWithTranscriptPosts++;
+          } else if (source === 'nataliaChannelPost') {
+            stats.duplicatesWithNataliaChannelPosts++;
           }
+        } else if (isNataliaRelevanceRejected(nataliaSimilarity, isDuplicate)) {
+          // Идея не дубль, но слишком похожа на канал Натальи — отбраковка по релевантности
+          await markAsDuplicate(
+            idea.id,
+            NATALIA_RELEVANCE_REASON,
+            '',
+            nataliaSimilarity
+          );
+
+          stats.duplicates++;
         } else {
           if (maxSimilarity > 0) {
             await updateMaxSimilarity(idea.id, maxSimilarity);

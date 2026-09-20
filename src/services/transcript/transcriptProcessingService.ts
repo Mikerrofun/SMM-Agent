@@ -1,10 +1,10 @@
 /**
  * Оркестрация генерации постов из транскрипции.
  *
- * Для каждого из POSTS_PER_TRANSCRIPT постов делаем до MAX_ATTEMPTS_PER_POST попыток:
- * генерация → mainIdea → embedding → проверка дублей.
- * Первая уникальная попытка принимается и проставляется status = SENT.
- * Если все попытки дали дубли — пост не генерируется (failedPosts++).
+ * Цикл попыток (генерация → mainIdea → embedding → дедуп → SENT/DUPLICATE)
+ * живёт в общем пайплайне src/services/shared/postGeneration/.
+ * Здесь остаётся точка входа transcript-флоу: загрузка транскрипции,
+ * markAsProcessed, stats.
  */
 
 import { extractMainIdea } from '../../ai/mainIdeaExtractor';
@@ -21,9 +21,16 @@ import {
   getSentPosts,
   markAsDuplicate,
 } from '../../repositories/transcriptPostRepository';
-import { withRetry } from '../../shared/utils/retry';
-import type { TranscriptPostData } from '../../shared/types/transcript.types';
 import { generateAndCheckEmbedding } from './deduplicationService';
+import {
+  generateUniquePost,
+  generateAdditionalPostShared,
+} from '../shared/postGeneration/postGenerationPipeline';
+import type {
+  PostGenerationDeps,
+} from '../shared/postGeneration/postGeneration.types';
+import { createPostGenerationStats } from '../shared/postGeneration/postGeneration.types';
+import type { TranscriptPostData } from '../../shared/types/transcript.types';
 import {
   AI_RETRY_CONFIG,
   MAX_ATTEMPTS_PER_POST,
@@ -34,7 +41,39 @@ import type {
   ProcessingResult,
   ProcessingStats,
 } from './transcriptProcessingService.types';
+import type { CreateTranscriptPostInput } from '../../shared/types/transcript.types';
 
+
+function buildDeps(
+  transcript: { id: string; text: string }
+): PostGenerationDeps<TranscriptPostData, CreateTranscriptPostInput> {
+  return {
+    repository: {
+      create: createTranscriptPost,
+      updateEmbedding,
+      updateSimilarity,
+      updateStatus,
+      markAsDuplicate,
+    },
+    config: {
+      maxAttemptsPerPost: MAX_ATTEMPTS_PER_POST,
+      retryConfig: AI_RETRY_CONFIG,
+      targetSource: 'transcriptPost',
+    },
+    checkDuplication: (mainIdea) => generateAndCheckEmbedding(mainIdea, 'transcriptPost'),
+    generateText: (usedMainIdeas) =>
+      generatePostFromTranscript(transcript.text, usedMainIdeas),
+    extractMainIdea,
+    createInput: ({ text, mainIdea, attemptNumber }) => ({
+      transcriptId: transcript.id,
+      text,
+      mainIdea,
+      attemptNumber,
+    }),
+    logPrefix: '[TranscriptProcessing]',
+    logContext: { transcriptId: transcript.id },
+  };
+}
 
 async function generateSinglePost(
   transcript: { id: string; text: string },
@@ -43,83 +82,13 @@ async function generateSinglePost(
   stats: ProcessingStats,
   errors: string[]
 ): Promise<TranscriptPostData | null> {
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_POST; attempt++) {
-    stats.totalAttempts++;
-
-    try {
-      const postText = await withRetry(
-        () => generatePostFromTranscript(transcript.text, usedMainIdeas),
-        AI_RETRY_CONFIG
-      );
-
-      const mainIdea = await withRetry(
-        () => extractMainIdea(postText),
-        AI_RETRY_CONFIG
-      );
-
-      const post = await createTranscriptPost({
-        transcriptId: transcript.id,
-        text: postText,
-        mainIdea,
-        attemptNumber: attempt,
-      });
-
-      const dedupResult = await generateAndCheckEmbedding(mainIdea);
-
-      await updateEmbedding(post.id, dedupResult.embedding);
-      await updateSimilarity(post.id, dedupResult.maxSimilarity);
-
-      console.log('[TranscriptProcessing] Attempt', {
-        transcriptId: transcript.id,
-        postIndex,
-        attempt,
-        similarity: Number(dedupResult.maxSimilarity.toFixed(4)),
-        isDuplicate: dedupResult.isDuplicate,
-        source: dedupResult.source,
-        matchedId: dedupResult.matchedId,
-      });
-
-      if (!dedupResult.isDuplicate) {
-        // Уникальный пост: проставляем статус SENT
-        await updateStatus(post.id, 'SENT');
-
-        const sentPost: TranscriptPostData = {
-          ...post,
-          status: 'SENT',
-          similarity: dedupResult.maxSimilarity,
-          duplicateOfType: null,
-          duplicateOfId: null,
-        };
-
-        stats.uniquePosts++;
-        return sentPost;
-      }
-
-      // Дубль: помечаем как DUPLICATE с информацией об источнике
-      if (dedupResult.source && dedupResult.matchedId) {
-        await markAsDuplicate(
-          post.id,
-          dedupResult.source,
-          dedupResult.matchedId,
-          dedupResult.maxSimilarity
-        );
-      }
-
-      // Переходим к следующей попытке
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      errors.push(`post ${postIndex}, attempt ${attempt}: ${message}`);
-      console.error('[TranscriptProcessing] Attempt failed', {
-        transcriptId: transcript.id,
-        postIndex,
-        attempt,
-        error: message,
-      });
-    }
-  }
-
-  stats.failedPosts++;
-  return null;
+  return generateUniquePost(
+    buildDeps(transcript),
+    usedMainIdeas,
+    postIndex,
+    stats,
+    errors
+  );
 }
 
 export async function processTranscript(
@@ -133,12 +102,7 @@ export async function processTranscript(
     throw new TranscriptNotFoundError(transcriptId);
   }
 
-  const stats: ProcessingStats = {
-    totalAttempts: 0,
-    uniquePosts: 0,
-    duplicatePosts: 0,
-    failedPosts: 0,
-  };
+  const stats = createPostGenerationStats();
 
   const errors: string[] = [];
   const postsToSend: TranscriptPostData[] = [];
@@ -204,10 +168,6 @@ export async function generateAdditionalPost(
   reason?: 'no_unique_topics' | 'error';
   error?: string;
 }> {
-  console.log('[TranscriptProcessing] Generating additional post', {
-    transcriptId,
-  });
-
   try {
     const transcript = await getTranscriptById(transcriptId);
 
@@ -219,53 +179,22 @@ export async function generateAdditionalPost(
       };
     }
 
-    const sentPosts = await getSentPosts(transcriptId);
-    const usedMainIdeas = sentPosts.map((p) => p.mainIdea);
-
-    console.log('[TranscriptProcessing] Found sent posts', {
-      transcriptId,
-      sentPostsCount: sentPosts.length,
-      usedMainIdeas: usedMainIdeas.length,
+    return await generateAdditionalPostShared<TranscriptPostData>({
+      getUsedMainIdeas: async () => {
+        const sentPosts = await getSentPosts(transcriptId);
+        return sentPosts.map((p) => p.mainIdea);
+      },
+      generateSingle: (usedMainIdeas, postIndex, stats, errors) =>
+        generateSinglePost(
+          { id: transcriptId, text: transcript.text },
+          usedMainIdeas,
+          postIndex,
+          stats,
+          errors
+        ),
+      logPrefix: '[TranscriptProcessing]',
+      logContext: { transcriptId },
     });
-
-    const stats: ProcessingStats = {
-      totalAttempts: 0,
-      uniquePosts: 0,
-      duplicatePosts: 0,
-      failedPosts: 0,
-    };
-    const errors: string[] = [];
-
-    const post = await generateSinglePost(
-      { id: transcriptId, text: transcript.text },
-      usedMainIdeas,
-      sentPosts.length + 1,
-      stats,
-      errors
-    );
-
-    if (post === null) {
-      console.log('[TranscriptProcessing] No unique topics found', {
-        transcriptId,
-        totalAttempts: stats.totalAttempts,
-      });
-
-      return {
-        success: false,
-        reason: 'no_unique_topics',
-      };
-    }
-
-    console.log('[TranscriptProcessing] Additional post generated', {
-      transcriptId,
-      postId: post.id,
-      totalAttempts: stats.totalAttempts,
-    });
-
-    return {
-      success: true,
-      post,
-    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[TranscriptProcessing] Additional post generation failed', {

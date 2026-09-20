@@ -1,4 +1,4 @@
-export type PostType = 'generated' | 'transcript';
+export type PostType = 'generated' | 'transcript' | 'nataliaChannel';
 
 export interface WaitingForFeedbackState {
   postId: string;

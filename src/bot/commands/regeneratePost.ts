@@ -3,14 +3,38 @@ import { InlineKeyboard } from 'grammy';
 import {
   regenerateGeneratedPost,
   regenerateTranscriptPost,
+  regenerateNataliaChannelPost,
 } from '../../services/post/postRegenerationService';
-import type { 
-  PostType, 
-  WaitingForFeedbackState 
+import type {
+  PostType,
+  WaitingForFeedbackState
 } from '../../services/post/postRegenerationService.types';
 import { validateFeedback } from '../../shared/utils/feedbackValidator';
 
 export const waitingForFeedback = new Map<number, WaitingForFeedbackState>();
+
+const REGENERATE_PREFIXES: Array<{ prefix: string; postType: PostType }> = [
+  { prefix: 'regenerate_idea_post:', postType: 'generated' },
+  { prefix: 'regenerate_transcript_post:', postType: 'transcript' },
+  { prefix: 'regenerate_natalia_channel_post:', postType: 'nataliaChannel' },
+];
+
+const REGENERATE_FEEDBACK_PREFIXES: Array<{ prefix: string; postType: PostType }> = [
+  { prefix: 'regenerate_idea_post_feedback:', postType: 'generated' },
+  { prefix: 'regenerate_transcript_post_feedback:', postType: 'transcript' },
+  { prefix: 'regenerate_natalia_channel_post_feedback:', postType: 'nataliaChannel' },
+];
+
+function getCallbackPrefix(postType: PostType): string {
+  switch (postType) {
+    case 'generated':
+      return 'regenerate_idea_post';
+    case 'transcript':
+      return 'regenerate_transcript_post';
+    case 'nataliaChannel':
+      return 'regenerate_natalia_channel_post';
+  }
+}
 
 export async function handleRegeneratePostCallback(ctx: Context): Promise<void> {
   try {
@@ -20,25 +44,27 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
       return;
     }
 
-    const isGenerated = callbackData.startsWith('regenerate_idea_post:');
-    const isTranscript = callbackData.startsWith('regenerate_transcript_post:');
+    const matched = REGENERATE_PREFIXES.find((entry) =>
+      callbackData.startsWith(entry.prefix)
+    );
 
-    if (!isGenerated && !isTranscript) {
+    if (!matched) {
       await ctx.answerCallbackQuery({ text: '❌ Неверные данные' });
       return;
     }
 
-    const postType: PostType = isGenerated ? 'generated' : 'transcript';
-    const prefix = isGenerated ? 'regenerate_idea_post:' : 'regenerate_transcript_post:';
-    const postId = callbackData.replace(prefix, '');
+    const postType: PostType = matched.postType;
+    const postId = callbackData.replace(matched.prefix, '');
 
     await ctx.answerCallbackQuery({ text: '⏳ Генерирую...' });
- 
+
     const statusMessage = await ctx.reply('⏳ Генерирую новый пост...');
 
     const result = postType === 'generated'
       ? await regenerateGeneratedPost(postId)
-      : await regenerateTranscriptPost(postId);
+      : postType === 'transcript'
+        ? await regenerateTranscriptPost(postId)
+        : await regenerateNataliaChannelPost(postId);
 
     try {
       await ctx.api.deleteMessage(ctx.chat!.id, statusMessage.message_id);
@@ -55,7 +81,7 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
       return;
     }
 
-    const callbackPrefix = postType === 'generated' ? 'regenerate_idea_post' : 'regenerate_transcript_post';
+    const callbackPrefix = getCallbackPrefix(postType);
     const keyboard = new InlineKeyboard()
       .text('🔄 Перегенерировать', `${callbackPrefix}:${postId}`)
       .text('✏️ С уточнением', `${callbackPrefix}_feedback:${postId}`);
@@ -98,17 +124,17 @@ export async function handleRegeneratePostFeedbackCallback(ctx: Context): Promis
       return;
     }
 
-    const isGenerated = callbackData.startsWith('regenerate_idea_post_feedback:');
-    const isTranscript = callbackData.startsWith('regenerate_transcript_post_feedback:');
+    const matched = REGENERATE_FEEDBACK_PREFIXES.find((entry) =>
+      callbackData.startsWith(entry.prefix)
+    );
 
-    if (!isGenerated && !isTranscript) {
+    if (!matched) {
       await ctx.answerCallbackQuery({ text: '❌ Неверные данные' });
       return;
     }
 
-    const postType: PostType = isGenerated ? 'generated' : 'transcript';
-    const prefix = isGenerated ? 'regenerate_idea_post_feedback:' : 'regenerate_transcript_post_feedback:';
-    const postId = callbackData.replace(prefix, '');
+    const postType: PostType = matched.postType;
+    const postId = callbackData.replace(matched.prefix, '');
     const userId = ctx.from?.id;
     const messageId = ctx.callbackQuery?.message?.message_id;
 
@@ -173,7 +199,9 @@ export async function handleFeedbackMessage(ctx: Context): Promise<void> {
 
     const result = postType === 'generated'
       ? await regenerateGeneratedPost(postId, validatedFeedback)
-      : await regenerateTranscriptPost(postId, validatedFeedback);
+      : postType === 'transcript'
+        ? await regenerateTranscriptPost(postId, validatedFeedback)
+        : await regenerateNataliaChannelPost(postId, validatedFeedback);
 
     if (statusMessageId && ctx.chat) {
       try {
@@ -193,7 +221,7 @@ export async function handleFeedbackMessage(ctx: Context): Promise<void> {
       return;
     }
 
-    const callbackPrefix = postType === 'generated' ? 'regenerate_idea_post' : 'regenerate_transcript_post';
+    const callbackPrefix = getCallbackPrefix(postType);
     const keyboard = new InlineKeyboard()
       .text('🔄 Перегенерировать', `${callbackPrefix}:${postId}`)
       .text('✏️ С уточнением', `${callbackPrefix}_feedback:${postId}`);

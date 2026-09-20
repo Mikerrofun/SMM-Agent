@@ -1,4 +1,3 @@
-◇ injected env (0) from .env // tip: ⌘ suppress logs { quiet: true }
 -- CreateTable
 CREATE TABLE "NataliaChannelPost" (
     "id" TEXT NOT NULL,

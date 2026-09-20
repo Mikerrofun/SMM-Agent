@@ -1,11 +1,8 @@
 import type { TranscriptPostData } from '../../shared/types/transcript.types';
+import type { PostGenerationStats } from '../shared/postGeneration/postGeneration.types';
 
-export interface ProcessingStats {
-  totalAttempts: number;
-  uniquePosts: number;
-  duplicatePosts: number;
-  failedPosts: number;
-}
+/** Статистика генерации — общий контракт с shared-пайплайном. */
+export type ProcessingStats = PostGenerationStats;
 
 export interface ProcessingResult {
   transcriptId: string;

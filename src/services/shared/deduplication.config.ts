@@ -12,6 +12,10 @@ export const DEDUPLICATION_THRESHOLDS = {
   nataliaChannelPost: 0.75,
   crossContent: 0.80,
   sameType: 0.75,
+  // Пороги для natalia_channel_post: пост генерируется из карты mainIdea канала,
+  // поэтому тема наследуется из источника и схожесть с ним изначально выше
+  nataliaChannelPostVsNataliaPost: 0.85,
+  nataliaChannelPostVsSelf: 0.85,
 } as const;
 
 /**

@@ -18,7 +18,7 @@ import {
   updateEmbedding,
   updateSimilarity,
   updateStatus,
-  getSentPosts,
+  getRevealedMainIdeas,
   markAsDuplicate,
 } from '../../repositories/transcriptPostRepository';
 import { generateAndCheckEmbedding } from './deduplicationService';
@@ -180,10 +180,7 @@ export async function generateAdditionalPost(
     }
 
     return await generateAdditionalPostShared<TranscriptPostData>({
-      getUsedMainIdeas: async () => {
-        const sentPosts = await getSentPosts(transcriptId);
-        return sentPosts.map((p) => p.mainIdea);
-      },
+      getUsedMainIdeas: () => getRevealedMainIdeas(transcriptId),
       generateSingle: (usedMainIdeas, postIndex, stats, errors) =>
         generateSinglePost(
           { id: transcriptId, text: transcript.text },

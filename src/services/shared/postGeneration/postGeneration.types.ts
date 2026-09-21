@@ -95,7 +95,7 @@ export interface PostGenerationDeps<
 }
 
 export interface AdditionalPostDeps<TPost extends GeneratedPostBase> {
-  /** «Уже раскрытые темы» — mainIdea всех SENT-постов. */
+  /** «Уже раскрытые темы» — mainIdea всех SENT- и DUPLICATE-постов (дубли тоже раскрыты). */
   getUsedMainIdeas: () => Promise<string[]>;
   generateSingle: (
     usedMainIdeas: string[],

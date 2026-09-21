@@ -5,7 +5,8 @@
  * nataliaPostsGen). Потребители: transcript_post и natalia_channel_post.
  *
  * Цикл попыток: генерация → extractMainIdea → сохранение → embedding + дедуп →
- * SENT, либо markAsDuplicate (дубль или 'natalia_relevance') → следующая попытка.
+ * SENT, либо markAsDuplicate (дубль или 'natalia_relevance') → mainIdea попытки
+ * уходит в usedMainIdeas («уже раскрытые темы») → следующая попытка.
  * Исчерпание попыток → null.
  */
 
@@ -100,6 +101,11 @@ export async function generateUniquePost<
           dedupResult.maxSimilarity
         );
       }
+
+      // Отклонённая тема уже раскрыта (дубль или слишком близка к каналу):
+      // уходит в «УЖЕ РАСКРЫТЫЕ ТЕМЫ», иначе следующая попытка
+      // с высокой вероятностью генерирует её же снова
+      usedMainIdeas.push(mainIdea);
 
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

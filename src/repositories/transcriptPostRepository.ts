@@ -130,6 +130,26 @@ export async function getSentPosts(
 }
 
 /**
+ * MainIdea всех раскрытых тем транскрипции: SENT + DUPLICATE.
+ * Дубли тоже считаются раскрытыми — их mainIdea идёт в блок
+ * «УЖЕ РАСКРЫТЫЕ ТЕМЫ», чтобы генерация не возвращалась к той же теме.
+ * REJECTED-черновики (не отправлялись) раскрытыми не считаются.
+ */
+export async function getRevealedMainIdeas(
+  transcriptId: string
+): Promise<string[]> {
+  const posts = await prisma.transcriptPost.findMany({
+    where: {
+      transcriptId,
+      status: { in: ['SENT', 'DUPLICATE'] },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { mainIdea: true },
+  });
+  return posts.map((p) => p.mainIdea);
+}
+
+/**
  * Находит похожие TranscriptPost через cosine similarity (pgvector).
  *
  * Проверяет только посты со статусом SENT — черновики (REJECTED) не участвуют в дедупликации.

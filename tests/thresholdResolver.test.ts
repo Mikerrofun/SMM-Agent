@@ -6,8 +6,8 @@ test('nataliaChannelPost против nataliaPost — порог 0.85', () => {
   assert.equal(getThreshold('nataliaChannelPost', 'nataliaPost'), 0.85);
 });
 
-test('nataliaChannelPost против своих постов — порог 0.85', () => {
-  assert.equal(getThreshold('nataliaChannelPost', 'nataliaChannelPost'), 0.85);
+test('nataliaChannelPost против своих постов — базовый порог 0.75', () => {
+  assert.equal(getThreshold('nataliaChannelPost', 'nataliaChannelPost'), 0.75);
 });
 
 test('transcriptPost против nataliaPost — порог 0.75 (не изменён)', () => {

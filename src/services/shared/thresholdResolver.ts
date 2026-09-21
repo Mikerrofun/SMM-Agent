@@ -9,11 +9,11 @@ import type { DuplicateSource } from './deduplication.types';
  * Возвращает порог similarity для пары источников.
  *
  * Правила:
- * - nataliaChannelPost против NataliaPost и своих постов: 0.85 (тема наследуется
- *   из карты канала, схожесть с ней изначально выше)
+ * - nataliaChannelPost против NataliaPost: 0.85 (тема наследуется из карты
+ *   канала, схожесть с постами Натальи изначально выше)
  * - Проверка против NataliaPost (остальные флоу): 0.75
  * - Проверка Ideas ↔ TranscriptPosts: 0.80
- * - Проверка внутри одного типа: 0.75
+ * - Проверка внутри одного типа (включая посты канала между собой): 0.75
  *
  * @param targetSource - источник проверяемого контента
  * @param checkAgainstSource - источник, против которого проверяем
@@ -23,14 +23,11 @@ export function getThreshold(
   targetSource: DuplicateSource,
   checkAgainstSource: DuplicateSource
 ): number {
-  if (targetSource === 'nataliaChannelPost') {
-    if (checkAgainstSource === 'nataliaPost') {
-      return DEDUPLICATION_THRESHOLDS.nataliaChannelPostVsNataliaPost;
-    }
-
-    if (checkAgainstSource === 'nataliaChannelPost') {
-      return DEDUPLICATION_THRESHOLDS.nataliaChannelPostVsSelf;
-    }
+  if (
+    targetSource === 'nataliaChannelPost' &&
+    checkAgainstSource === 'nataliaPost'
+  ) {
+    return DEDUPLICATION_THRESHOLDS.nataliaChannelPostVsNataliaPost;
   }
 
   if (checkAgainstSource === 'nataliaPost') {

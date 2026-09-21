@@ -98,13 +98,12 @@ export const DEDUPLICATION_THRESHOLDS = {
   nataliaChannelPost: 0.75,
   crossContent: 0.80,
   sameType: 0.75,
-  // пороги для natalia_channel_post (см. раздел 7)
+  // порог для natalia_channel_post (см. раздел 7)
   nataliaChannelPostVsNataliaPost: 0.85,
-  nataliaChannelPostVsSelf: 0.85,
 } as const;
 ```
 
-В `thresholdResolver.ts` добавлен case для `nataliaChannelPost` (с итерации 21.09.2026 — пер-парные пороги 0.85, см. раздел 7). В оба dedup-сервиса добавлен четвёртый параллельный запрос `findSimilarNataliaChannelPosts(embedding, 0)` и четвёртый элемент в массиве источников `resolveBestMatch`. Теперь сгенерированный пост проверяется против: постов Натальи, **своих же сгенерированных постов канала**, transcript-постов и идей.
+В `thresholdResolver.ts` для `nataliaChannelPost → nataliaPost` порог 0.85 (см. раздел 7); между собой посты канала сравниваются по базовому 0.75. В оба dedup-сервиса добавлен четвёртый параллельный запрос `findSimilarNataliaChannelPosts(embedding, 0)` и четвёртый элемент в массиве источников `resolveBestMatch`. Теперь сгенерированный пост проверяется против: постов Натальи, **своих же сгенерированных постов канала**, transcript-постов и идей.
 
 ### 3.5 Общий пайплайн (главный рефакторинг)
 

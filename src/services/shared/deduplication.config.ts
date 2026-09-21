@@ -4,7 +4,8 @@ import type { RetryConfig } from '../../shared/utils/retry';
  * Единая конфигурация порогов similarity для дедупликации.
  * 
  * - nataliaPost: порог для проверки против постов Натальи
- * - crossContent: порог для проверки Ideas ↔ TranscriptPosts
+ * - crossContent: порог для проверки Ideas ↔ TranscriptPosts,
+ *   а также nataliaChannelPost ↔ Ideas/TranscriptPosts
  * - sameType: порог для проверки внутри одного типа (Idea vs Idea, TranscriptPost vs TranscriptPost)
  */
 export const DEDUPLICATION_THRESHOLDS = {

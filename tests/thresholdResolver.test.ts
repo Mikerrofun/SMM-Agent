@@ -14,8 +14,14 @@ test('transcriptPost против nataliaPost — порог 0.75 (не изме
   assert.equal(getThreshold('transcriptPost', 'nataliaPost'), 0.75);
 });
 
-test('idea против nataliaChannelPost — порог 0.75 (не изменён)', () => {
-  assert.equal(getThreshold('idea', 'nataliaChannelPost'), 0.75);
+test('nataliaChannelPost ↔ idea — crossContent 0.80', () => {
+  assert.equal(getThreshold('nataliaChannelPost', 'idea'), 0.80);
+  assert.equal(getThreshold('idea', 'nataliaChannelPost'), 0.80);
+});
+
+test('nataliaChannelPost ↔ transcriptPost — crossContent 0.80', () => {
+  assert.equal(getThreshold('nataliaChannelPost', 'transcriptPost'), 0.80);
+  assert.equal(getThreshold('transcriptPost', 'nataliaChannelPost'), 0.80);
 });
 
 test('crossContent и sameType не изменены', () => {

@@ -13,6 +13,7 @@ import type { DuplicateSource } from './deduplication.types';
  *   канала, схожесть с постами Натальи изначально выше)
  * - Проверка против NataliaPost (остальные флоу): 0.75
  * - Проверка Ideas ↔ TranscriptPosts: 0.80
+ * - Проверка nataliaChannelPost ↔ Ideas/TranscriptPosts: 0.80
  * - Проверка внутри одного типа (включая посты канала между собой): 0.75
  *
  * @param targetSource - источник проверяемого контента
@@ -43,6 +44,28 @@ export function getThreshold(
   }
 
   if (targetSource === 'transcriptPost' && checkAgainstSource === 'idea') {
+    return DEDUPLICATION_THRESHOLDS.crossContent;
+  }
+
+  if (targetSource === 'nataliaChannelPost' && checkAgainstSource === 'idea') {
+    return DEDUPLICATION_THRESHOLDS.crossContent;
+  }
+
+  if (targetSource === 'idea' && checkAgainstSource === 'nataliaChannelPost') {
+    return DEDUPLICATION_THRESHOLDS.crossContent;
+  }
+
+  if (
+    targetSource === 'nataliaChannelPost' &&
+    checkAgainstSource === 'transcriptPost'
+  ) {
+    return DEDUPLICATION_THRESHOLDS.crossContent;
+  }
+
+  if (
+    targetSource === 'transcriptPost' &&
+    checkAgainstSource === 'nataliaChannelPost'
+  ) {
     return DEDUPLICATION_THRESHOLDS.crossContent;
   }
 

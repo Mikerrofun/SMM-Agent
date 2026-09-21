@@ -93,7 +93,7 @@ export async function updateStatus(
  * @param threshold — минимальная similarity (0 — вернуть всё)
  * @returns совпадения, отсортированные по similarity DESC
  */
-export async function findSimilarPostsForIdeas(
+export async function findSimilarTranscriptPostsForIdeaDedup(
   embedding: number[],
   threshold: number
 ): Promise<SimilarityMatch[]> {
@@ -158,7 +158,7 @@ export async function getRevealedMainIdeas(
  * @param threshold — минимальная similarity (0 — вернуть всё)
  * @returns совпадения, отсортированные по similarity DESC
  */
-export async function findSimilarPosts(
+export async function findSimilarTranscriptPosts(
   embedding: number[],
   threshold: number
 ): Promise<SimilarityMatch[]> {

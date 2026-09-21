@@ -73,8 +73,8 @@ bot.command("status", async (ctx) => {
 });
 
 bot.callbackQuery(/^generate_post:/, handleGeneratePostCallback);
-bot.callbackQuery(/^regenerate_(idea|transcript|natalia_channel)_post:/, handleRegeneratePostCallback);
-bot.callbackQuery(/^regenerate_(idea|transcript|natalia_channel)_post_feedback:/, handleRegeneratePostFeedbackCallback);
+bot.callbackQuery(/^regenerate_(idea|transcript)_post:|^regen_natalia_post:/, handleRegeneratePostCallback);
+bot.callbackQuery(/^regenerate_(idea|transcript)_post_feedback:|^regen_natalia_post_feedback:/, handleRegeneratePostFeedbackCallback);
 bot.callbackQuery("run_pipeline", handleRunPipelineCallback);
 bot.callbackQuery(/^transcript_more:/, handleTranscriptMoreCallback);
 bot.callbackQuery(/^natalia_channel_more:/, handleNataliaChannelMoreCallback);

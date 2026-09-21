@@ -21,8 +21,9 @@ export async function sendSinglePost(
       throw new Error('[NataliaChannelPost] Post ID is missing');
     }
 
-    const regenerateCallback = `regenerate_natalia_channel_post:${post.id}`;
-    const feedbackCallback = `regenerate_natalia_channel_post_feedback:${post.id}`;
+    // Короткие префиксы: длинный вариант не влезал в лимит Telegram 64 байта
+    const regenerateCallback = `regen_natalia_post:${post.id}`;
+    const feedbackCallback = `regen_natalia_post_feedback:${post.id}`;
 
     // Валидируем callback_data перед созданием клавиатуры
     validateCallbackData(regenerateCallback, '🔄 Перегенерировать');

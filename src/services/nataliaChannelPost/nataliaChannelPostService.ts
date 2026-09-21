@@ -17,7 +17,7 @@ import {
   updateSimilarity,
   updateStatus,
   markAsDuplicate,
-  getSentPosts,
+  getRevealedMainIdeas,
 } from '../../repositories/nataliaChannelPostRepository';
 import { generateAndCheckEmbedding } from '../transcript/deduplicationService';
 import { buildNataliaChannelContext } from '../shared/postGeneration/nataliaChannelContext';
@@ -27,7 +27,6 @@ import {
 } from '../shared/postGeneration/postGenerationPipeline';
 import type {
   PostGenerationDeps,
-  PostGenerationStats,
 } from '../shared/postGeneration/postGeneration.types';
 import { createPostGenerationStats } from '../shared/postGeneration/postGeneration.types';
 import type {
@@ -136,10 +135,7 @@ export async function generateAdditionalNataliaChannelPost(): Promise<{
   error?: string;
 }> {
   return generateAdditionalPostShared<NataliaChannelPostData>({
-    getUsedMainIdeas: async () => {
-      const sentPosts = await getSentPosts();
-      return sentPosts.map((p) => p.mainIdea);
-    },
+    getUsedMainIdeas: getRevealedMainIdeas,
     generateSingle: (usedMainIdeas, postIndex, stats, errors) =>
       generateUniquePost(buildDeps(), usedMainIdeas, postIndex, stats, errors),
     logPrefix: '[NataliaChannelPost]',

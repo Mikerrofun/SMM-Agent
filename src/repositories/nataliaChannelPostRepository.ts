@@ -127,6 +127,21 @@ export async function getSentPosts(): Promise<NataliaChannelPostData[]> {
   });
 }
 
+/**
+ * MainIdea всех раскрытых тем: SENT + DUPLICATE.
+ * Дубли тоже считаются раскрытыми — их mainIdea идёт в блок
+ * «УЖЕ РАСКРЫТЫЕ ТЕМЫ», чтобы генерация не возвращалась к той же теме.
+ * REJECTED-черновики (не отправлялись) раскрытыми не считаются.
+ */
+export async function getRevealedMainIdeas(): Promise<string[]> {
+  const posts = await prisma.nataliaChannelPost.findMany({
+    where: { status: { in: ['SENT', 'DUPLICATE'] } },
+    orderBy: { createdAt: 'asc' },
+    select: { mainIdea: true },
+  });
+  return posts.map((p) => p.mainIdea);
+}
+
 export async function getNataliaChannelPostById(
   id: string
 ): Promise<NataliaChannelPostData | null> {

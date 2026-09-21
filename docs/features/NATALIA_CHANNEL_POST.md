@@ -95,13 +95,15 @@ model NataliaChannelPost {
 // src/services/shared/deduplication.config.ts
 export const DEDUPLICATION_THRESHOLDS = {
   nataliaPost: 0.75,
-  nataliaChannelPost: 0.75,  // новый
+  nataliaChannelPost: 0.75,
   crossContent: 0.80,
   sameType: 0.75,
+  // порог для natalia_channel_post (см. раздел 7)
+  nataliaChannelPostVsNataliaPost: 0.85,
 } as const;
 ```
 
-В `thresholdResolver.ts` добавлен case для `nataliaChannelPost`. В оба dedup-сервиса добавлен четвёртый параллельный запрос `findSimilarNataliaChannelPosts(embedding, 0)` и четвёртый элемент в массиве источников `resolveBestMatch`. Теперь сгенерированный пост проверяется против: постов Натальи, **своих же сгенерированных постов канала**, transcript-постов и идей.
+В `thresholdResolver.ts` для `nataliaChannelPost → nataliaPost` порог 0.85 (см. раздел 7); между собой посты канала сравниваются по базовому 0.75. В оба dedup-сервиса добавлен четвёртый параллельный запрос `findSimilarNataliaChannelPosts(embedding, 0)` и четвёртый элемент в массиве источников `resolveBestMatch`. Теперь сгенерированный пост проверяется против: постов Натальи, **своих же сгенерированных постов канала**, transcript-постов и идей.
 
 ### 3.5 Общий пайплайн (главный рефакторинг)
 
@@ -123,7 +125,7 @@ export interface PostGenerationDeps<TPost, TCreateInput> {
 
 Цикл внутри `generateUniquePost` (`postGenerationPipeline.ts`): генерация → extractMainIdea → `repository.create` → `checkDuplication` → `updateEmbedding`/`updateSimilarity` → SENT, либо `markAsDuplicate` (дубль или `'natalia_relevance'`) → следующая попытка. Исчерпание `maxAttemptsPerPost` → `null`.
 
-Рядом — `generateAdditionalPostShared` (логика кнопки «ещё»: взять SENT-посты → их mainIdea как usedMainIdeas → одна генерация → `'no_unique_topics'` при неудаче).
+Рядом — `generateAdditionalPostShared` (логика кнопки «ещё»: взять раскрытые темы — mainIdea SENT- и DUPLICATE-постов — как usedMainIdeas → одна генерация → `'no_unique_topics'` при неудаче).
 
 `transcriptProcessingService` переведён на этот пайплайн — публичный API (`processTranscriptPosts`) не изменился, монолитный `generateSinglePost` удалён.
 
@@ -220,9 +222,9 @@ deps.checkDuplication(mainIdea)
 generateAndCheckEmbedding(mainIdea, 'nataliaChannelPost')  [transcript/deduplicationService.ts]
 ↓
 createEmbedding(mainIdea) → checkPostDuplication(embedding, targetSource)
-↓  Promise.all — 4 источника:
-   findSimilarNataliaPosts        (NataliaPost,        порог 0.75)
-   findSimilarNataliaChannelPosts (NataliaChannelPost, порог 0.75)  ← 4-й источник, новый
+↓  Promise.all — 4 источника (пороги для targetSource=nataliaChannelPost, см. раздел 7):
+   findSimilarNataliaPosts        (NataliaPost,        порог 0.85)
+   findSimilarNataliaChannelPosts (NataliaChannelPost, порог 0.85)  ← 4-й источник, новый
    findSimilarPosts               (TranscriptPost,     порог 0.75)
    findSimilarIdeasForTranscript  (Ideas,              порог 0.80)
 ↓
@@ -249,8 +251,8 @@ generateAdditionalNataliaChannelPost()          [nataliaChannelPostService.ts]
 ↓
 generateAdditionalPostShared                    [shared/postGeneration/postGenerationPipeline.ts]
 ↓
-getUsedMainIdeas() → getSentPosts() → mainIdea всех SENT-постов
-↓  (для transcript-флоу то же самое, но из TranscriptPost)
+getUsedMainIdeas() → getRevealedMainIdeas() → mainIdea всех SENT- и DUPLICATE-постов
+↓  (для transcript-флоу то же самое, но из TranscriptPost, скоуп по transcriptId)
 generateUniquePost(...) — тот же цикл, что выше
 ↓
 успех → sendSinglePost + новая кнопка «ещё»
@@ -273,6 +275,18 @@ generateUniquePost(...) — тот же цикл, что выше
 3. **Тематическая карта из БД при каждом вызове, без кэша.** ~160 коротких строк — один дешёвый SELECT. Кэш/файл дал бы рассинхрон после добавления постов в канал, а выгода от кэша — миллисекунды на фоне 30-60 секунд генерации.
 4. **'natalia_relevance' как значение duplicateOfType, а не отдельный статус.** Статус остаётся DUPLICATE — вся существующая аналитика/фильтрация по статусам работает без изменений; причина различается полем duplicateOfType, а отсутствие duplicateOfId ('') однозначно отделяет релевантность от дубля.
 
+## 7. Итерация 21.09.2026 — пороги 0.85 для natalia_channel_post и «раскрытые» дубли
+
+### Проблема
+
+Первые прогоны `/natalia_channel_post` почти полностью отбраковывались: из всех попыток уникальным оказывался максимум один пост. Причина — врождённое противоречие флоу: пост генерируется ИЗ карты mainIdea канала, а дедуп проверяет его против этой же карты (NataliaPost). «Та же тема, новый ракурс» даёт embedding-схожесть 0.7–0.85 — порог 0.75 резал почти всё. Усугублял каскад: mainIdea отклонённой попытки нигде не запоминалась, и следующая попытка с высокой вероятностью снова брала ту же «сгоревшую» тему.
+
+### Что изменено
+
+1. **Пер-парные пороги** (`deduplication.config.ts` + `thresholdResolver.ts`): `nataliaChannelPost → nataliaPost = 0.85` и `nataliaChannelPost → nataliaChannelPost = 0.85`. Порог зависит от targetSource — ослаблен только для natalia_channel_post; transcript- и idea-флоу живут на прежних 0.75/0.80.
+2. **Отклонённая тема = раскрытая тема** (`postGenerationPipeline.ts`): mainIdea попытки, отклонённой как дубль или по релевантности, добавляется в usedMainIdeas — блок «УЖЕ РАСКРЫТЫЕ ТЕМЫ» в промпте. Следующая попытка (и следующий пост прогона) получает её в списке исключений и выбирает другую тему. Работает в обоих флоу через общий пайплайн.
+3. **getUsedMainIdeas включает дубли** (оба флоу): новые `getRevealedMainIdeas()` в `nataliaChannelPostRepository` / `transcriptPostRepository` возвращают mainIdea SENT- и DUPLICATE-постов (REJECTED-черновики раскрытыми не считаются). Кнопка «ещё» больше не предлагает темы, которые уже были сгенерированы и отклонены. `getSentPosts()` не тронут — используется для отображения.
+
 ## Преимущества
 
 - ✅ Новый источник постов без транскриптов: карта канала → пост, всегда на свежих данных
@@ -281,4 +295,4 @@ generateUniquePost(...) — тот же цикл, что выше
 - ✅ Один пайплайн на два флоу: багфикс в цикле попыток/дедупе чинит обе команды сразу
 - ✅ Prefix-кэш промпта: статичная часть user message не меняется между вызовами
 - ✅ Transcript-флоу и идеи получили фильтр релевантности без изменения своих API
-- ✅ 12 тестов на новую логику (similarityResolver, relevanceFilter, nataliaChannelContext), `npm test`
+- ✅ 17 тестов на новую логику (similarityResolver, relevanceFilter, nataliaChannelContext, thresholdResolver), `npm test`

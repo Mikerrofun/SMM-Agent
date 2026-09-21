@@ -11,9 +11,9 @@
 
 import { createEmbedding } from '../../ai/embeddings';
 import { findSimilarNataliaPosts } from '../../repositories/nataliaPostRepository';
-import { findSimilarPosts as findSimilarNataliaChannelPosts } from '../../repositories/nataliaChannelPostRepository';
-import { findSimilarPosts } from '../../repositories/transcriptPostRepository';
-import { findSimilarIdeasForTranscript } from '../../repositories/ideaRepository';
+import { findSimilarNataliaChannelPosts } from '../../repositories/nataliaChannelPostRepository';
+import { findSimilarTranscriptPosts } from '../../repositories/transcriptPostRepository';
+import { findSimilarIdeasForPostDedup } from '../../repositories/ideaRepository';
 import { withRetry } from '../../shared/utils/retry';
 import { DEDUPLICATION_RETRY_CONFIG } from '../shared/deduplication.config';
 import { resolveBestMatch } from '../shared/similarityResolver';
@@ -33,8 +33,8 @@ export async function checkPostDuplication(
   const [nataliaMatches, nataliaChannelMatches, transcriptMatches, ideaMatches] = await Promise.all([
     findSimilarNataliaPosts(embedding, 0),
     findSimilarNataliaChannelPosts(embedding, 0),
-    findSimilarPosts(embedding, 0),
-    findSimilarIdeasForTranscript(embedding, 0),
+    findSimilarTranscriptPosts(embedding, 0),
+    findSimilarIdeasForPostDedup(embedding, 0),
   ]);
 
   const { maxSimilarity, source, matchedId, nataliaSimilarity } = resolveBestMatch(targetSource, [

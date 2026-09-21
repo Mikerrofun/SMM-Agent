@@ -1,12 +1,12 @@
 import {
   getNewIdeasWithEmbeddings,
-  findSimilarIdeas,
+  findSimilarIdeasForGeneration,
   markAsDuplicate,
   updateMaxSimilarity,
 } from '../../repositories/ideaRepository';
 import { findSimilarNataliaPosts } from '../../repositories/nataliaPostRepository';
-import { findSimilarPosts as findSimilarNataliaChannelPosts } from '../../repositories/nataliaChannelPostRepository';
-import { findSimilarPostsForIdeas } from '../../repositories/transcriptPostRepository';
+import { findSimilarNataliaChannelPosts } from '../../repositories/nataliaChannelPostRepository';
+import { findSimilarTranscriptPostsForIdeaDedup } from '../../repositories/transcriptPostRepository';
 import { withRetry } from '../../shared/utils/retry';
 import { DEDUPLICATION_RETRY_CONFIG } from '../shared/deduplication.config';
 import { resolveBestMatch } from '../shared/similarityResolver';
@@ -45,10 +45,10 @@ export async function deduplicateIdeas(
 
       await withRetry(async () => {
           const [ideaMatches, nataliaMatches, nataliaChannelMatches, transcriptMatches] = await Promise.all([
-             findSimilarIdeas(embeddingArray, 0, idea.id),
+             findSimilarIdeasForGeneration(embeddingArray, 0, idea.id),
              findSimilarNataliaPosts(embeddingArray, 0),
              findSimilarNataliaChannelPosts(embeddingArray, 0),
-             findSimilarPostsForIdeas(embeddingArray, 0),
+             findSimilarTranscriptPostsForIdeaDedup(embeddingArray, 0),
           ]);
 
           const { maxSimilarity, source, matchedId, nataliaSimilarity } = resolveBestMatch('idea', [

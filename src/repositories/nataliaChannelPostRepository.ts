@@ -93,7 +93,7 @@ export async function updateStatus(
  * @param threshold — минимальная similarity (0 — вернуть всё)
  * @returns совпадения, отсортированные по similarity DESC
  */
-export async function findSimilarPosts(
+export async function findSimilarNataliaChannelPosts(
   embedding: number[],
   threshold: number
 ): Promise<SimilarityMatch[]> {

@@ -153,14 +153,16 @@ export async function getNewIdeasWithEmbeddings(): Promise<IdeaWithEmbedding[]> 
 }
 
 /**
- * Находит похожие идеи через cosine similarity (pgvector).
+ * Находит похожие идеи для дедупликации при генерации идей.
+ * Полный пул (NEW + SENT + SELECTED): батч не должен приносить пользователю
+ * похожие идеи, даже если предыдущие ещё не отправлены.
  * @param embedding — вектор для сравнения (массив чисел)
  * @param threshold — минимальное значение similarity (от 0 до 1)
  * @param excludeId — ID идеи, которую нужно исключить (не сравнивать саму с собой)
  * @returns массив совпадений, отсортированных по createdAt ASC (самая старая первая)
  * @throws при ошибке БД
  */
-export async function findSimilarIdeas(
+export async function findSimilarIdeasForGeneration(
   embedding: number[],
   threshold: number,
   excludeId: string
@@ -176,7 +178,7 @@ export async function findSimilarIdeas(
       "createdAt"
     FROM "Idea"
     WHERE embedding IS NOT NULL
-      AND status = ANY(ARRAY['NEW', 'SENT']::"IdeaStatus"[])
+      AND status = ANY(ARRAY['NEW', 'SENT', 'SELECTED']::"IdeaStatus"[])
       AND id != ${excludeId}
       AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
     ORDER BY similarity DESC, "createdAt" ASC
@@ -224,13 +226,16 @@ export async function markAsDuplicate(
 }
 
 /**
- * Находит похожие идеи для проверки TranscriptPost против Ideas.
+ * Находит похожие идеи для дедупликации постов
+ * (TranscriptPost / NataliaChannelPost против Ideas).
+ * В пуле только опубликованный контент (SENT + SELECTED): неотправленные
+ * NEW-идеи, которые никто не видел, не блокируют генерацию постов.
  * @param embedding — вектор для сравнения (массив чисел)
  * @param threshold — минимальное значение similarity (от 0 до 1)
  * @returns массив совпадений, отсортированных по similarity DESC
  * @throws при ошибке БД
  */
-export async function findSimilarIdeasForTranscript(
+export async function findSimilarIdeasForPostDedup(
   embedding: number[],
   threshold: number
 ): Promise<SimilarityMatch[]> {
@@ -245,7 +250,7 @@ export async function findSimilarIdeasForTranscript(
       "createdAt"
     FROM "Idea"
     WHERE embedding IS NOT NULL
-      AND status = ANY(ARRAY['NEW', 'SENT', 'SELECTED']::\"IdeaStatus\"[])
+      AND status = ANY(ARRAY['SENT', 'SELECTED']::"IdeaStatus"[])
       AND (1 - (embedding <=> ${vectorLiteral}::vector)) >= ${threshold}
     ORDER BY similarity DESC, "createdAt" ASC
   `;

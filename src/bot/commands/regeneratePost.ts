@@ -17,13 +17,13 @@ export const waitingForFeedback = new Map<number, WaitingForFeedbackState>();
 const REGENERATE_PREFIXES: Array<{ prefix: string; postType: PostType }> = [
   { prefix: 'regenerate_idea_post:', postType: 'generated' },
   { prefix: 'regenerate_transcript_post:', postType: 'transcript' },
-  { prefix: 'regenerate_natalia_channel_post:', postType: 'nataliaChannel' },
+  { prefix: 'regen_natalia_post:', postType: 'nataliaChannel' },
 ];
 
 const REGENERATE_FEEDBACK_PREFIXES: Array<{ prefix: string; postType: PostType }> = [
   { prefix: 'regenerate_idea_post_feedback:', postType: 'generated' },
   { prefix: 'regenerate_transcript_post_feedback:', postType: 'transcript' },
-  { prefix: 'regenerate_natalia_channel_post_feedback:', postType: 'nataliaChannel' },
+  { prefix: 'regen_natalia_post_feedback:', postType: 'nataliaChannel' },
 ];
 
 function getCallbackPrefix(postType: PostType): string {
@@ -33,7 +33,7 @@ function getCallbackPrefix(postType: PostType): string {
     case 'transcript':
       return 'regenerate_transcript_post';
     case 'nataliaChannel':
-      return 'regenerate_natalia_channel_post';
+      return 'regen_natalia_post';
   }
 }
 

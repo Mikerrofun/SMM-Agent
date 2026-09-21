@@ -10,6 +10,7 @@ import type {
   WaitingForFeedbackState
 } from '../../services/post/postRegenerationService.types';
 import { validateFeedback } from '../../shared/utils/feedbackValidator';
+import { validateCallbackData } from '../../shared/utils/callbackDataValidator';
 
 export const waitingForFeedback = new Map<number, WaitingForFeedbackState>();
 
@@ -56,6 +57,12 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
     const postType: PostType = matched.postType;
     const postId = callbackData.replace(matched.prefix, '');
 
+    if (!postId) {
+      await ctx.answerCallbackQuery({ text: '❌ Неверный ID поста' });
+      console.error('[Regenerate] Post ID is missing:', { callbackData, postType });
+      return;
+    }
+
     await ctx.answerCallbackQuery({ text: '⏳ Генерирую...' });
 
     const statusMessage = await ctx.reply('⏳ Генерирую новый пост...');
@@ -82,9 +89,16 @@ export async function handleRegeneratePostCallback(ctx: Context): Promise<void> 
     }
 
     const callbackPrefix = getCallbackPrefix(postType);
+    const regenerateCallback = `${callbackPrefix}:${postId}`;
+    const feedbackCallback = `${callbackPrefix}_feedback:${postId}`;
+
+    // Валидируем callback_data перед созданием клавиатуры
+    validateCallbackData(regenerateCallback, '🔄 Перегенерировать', '[Regenerate]');
+    validateCallbackData(feedbackCallback, '✏️ С уточнением', '[Regenerate]');
+
     const keyboard = new InlineKeyboard()
-      .text('🔄 Перегенерировать', `${callbackPrefix}:${postId}`)
-      .text('✏️ С уточнением', `${callbackPrefix}_feedback:${postId}`);
+      .text('🔄 Перегенерировать', regenerateCallback)
+      .text('✏️ С уточнением', feedbackCallback);
 
     await ctx.reply(`✅ <b>Новый вариант поста:</b>\n\n${result.postText}`, {
       parse_mode: 'HTML',
@@ -189,6 +203,13 @@ export async function handleFeedbackMessage(ctx: Context): Promise<void> {
     return;
   }
 
+  if (!postId) {
+    console.error('[Regenerate] Post ID is missing in feedback state:', { userId, postType });
+    await ctx.reply('❌ Ошибка: не удалось определить ID поста');
+    waitingForFeedback.delete(userId);
+    return;
+  }
+
   let statusMessageId: number | undefined;
 
   try {
@@ -222,9 +243,16 @@ export async function handleFeedbackMessage(ctx: Context): Promise<void> {
     }
 
     const callbackPrefix = getCallbackPrefix(postType);
+    const regenerateCallback = `${callbackPrefix}:${postId}`;
+    const feedbackCallback = `${callbackPrefix}_feedback:${postId}`;
+
+    // Валидируем callback_data перед созданием клавиатуры
+    validateCallbackData(regenerateCallback, '🔄 Перегенерировать', '[Regenerate]');
+    validateCallbackData(feedbackCallback, '✏️ С уточнением', '[Regenerate]');
+
     const keyboard = new InlineKeyboard()
-      .text('🔄 Перегенерировать', `${callbackPrefix}:${postId}`)
-      .text('✏️ С уточнением', `${callbackPrefix}_feedback:${postId}`);
+      .text('🔄 Перегенерировать', regenerateCallback)
+      .text('✏️ С уточнением', feedbackCallback);
 
     await ctx.reply(`✅ <b>Новый вариант поста:</b>\n\n${result.postText}`, {
       parse_mode: 'HTML',

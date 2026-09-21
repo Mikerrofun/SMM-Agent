@@ -24,6 +24,14 @@ export async function handleTranscriptMoreCallback(
 
     const transcriptId = callbackData.replace(CALLBACK_PREFIX, '');
 
+    if (!transcriptId) {
+      console.error('[TranscriptPost] Transcript ID is missing from callback:', { callbackData });
+      await ctx.answerCallbackQuery({
+        text: '❌ Неверный ID транскрипции',
+      });
+      return;
+    }
+
     await ctx.answerCallbackQuery({
       text: '⏳ Ищу уникальную тему...',
     });
@@ -51,16 +59,29 @@ export async function handleTranscriptMoreCallback(
             'Все инсайты из транскрипции уже использованы.'
         );
       } else {
-        const keyboard = new InlineKeyboard().text(
-          '📝 Найти ещё пост',
-          `${CALLBACK_PREFIX}${transcriptId}`
-        );
+        const moreCallback = `${CALLBACK_PREFIX}${transcriptId}`;
+        const byteLength = Buffer.byteLength(moreCallback, 'utf8');
+        
+        if (byteLength <= 64) {
+          const keyboard = new InlineKeyboard().text(
+            '📝 Найти ещё пост',
+            moreCallback
+          );
 
-        await ctx.reply(
-          `❌ Произошла ошибка: ${result.error ?? 'Неизвестная ошибка'}\n\n` +
-            'Попробуй ещё раз.',
-          { reply_markup: keyboard }
-        );
+          await ctx.reply(
+            `❌ Произошла ошибка: ${result.error ?? 'Неизвестная ошибка'}\n\n` +
+              'Попробуй ещё раз.',
+            { reply_markup: keyboard }
+          );
+        } else {
+          console.error('[TranscriptPost] callback_data too long for retry button:', {
+            callback: moreCallback,
+            byteLength,
+          });
+          await ctx.reply(
+            `❌ Произошла ошибка: ${result.error ?? 'Неизвестная ошибка'}`
+          );
+        }
       }
       return;
     }
@@ -70,15 +91,26 @@ export async function handleTranscriptMoreCallback(
 
     await sendSinglePost(ctx, result.post!, postNumber);
 
-    const keyboard = new InlineKeyboard().text(
-      '📝 Найти ещё пост',
-      `${CALLBACK_PREFIX}${transcriptId}`
-    );
+    const moreCallback = `${CALLBACK_PREFIX}${transcriptId}`;
+    const byteLength = Buffer.byteLength(moreCallback, 'utf8');
 
-    await ctx.reply(
-      `✅ Найден ещё один пост из этой встречи!`,
-      { reply_markup: keyboard }
-    );
+    if (byteLength <= 64) {
+      const keyboard = new InlineKeyboard().text(
+        '📝 Найти ещё пост',
+        moreCallback
+      );
+
+      await ctx.reply(
+        `✅ Найден ещё один пост из этой встречи!`,
+        { reply_markup: keyboard }
+      );
+    } else {
+      console.error('[TranscriptPost] callback_data too long for "More" button:', {
+        callback: moreCallback,
+        byteLength,
+      });
+      await ctx.reply(`✅ Найден ещё один пост из этой встречи!`);
+    }
 
     console.log('[TranscriptPost] Additional post sent', {
       transcriptId,
@@ -87,6 +119,7 @@ export async function handleTranscriptMoreCallback(
   } catch (error) {
     console.error('[TranscriptPost] Callback handler failed', {
       error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     });
 
     try {

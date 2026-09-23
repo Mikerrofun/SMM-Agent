@@ -18,6 +18,7 @@ export async function handleNataliaChannelPostCommand(
 ): Promise<void> {
   const userId = ctx.from?.id;
 
+
   if (!userId) {
     return;
   }

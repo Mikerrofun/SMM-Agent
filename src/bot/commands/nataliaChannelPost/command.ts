@@ -3,11 +3,11 @@
  * из главных идей канала Натальи
  */
 
-import type { Context } from 'grammy';
+import { Context } from 'grammy';
 import { processNataliaChannelPosts } from '../../../services/nataliaChannelPost';
 import { finishAndShowButton } from './renderer';
 import type { StatusMessageId } from '../../../shared/types/nataliaChannelPost.types';
-
+import { ActiveCommand } from '../../../shared/utils/activeCommandSignal'; 
 /**
  * Map для защиты от повторного запуска, пока идёт генерация.
  */
@@ -17,7 +17,8 @@ export async function handleNataliaChannelPostCommand(
   ctx: Context
 ): Promise<void> {
   const userId = ctx.from?.id;
-
+  const commandManager = new ActiveCommand();
+  const commandId = commandManager.initCommand(ctx)
 
   if (!userId) {
     return;
@@ -34,9 +35,19 @@ export async function handleNataliaChannelPostCommand(
 
   try {
     const statusMessage = await ctx.reply(
-      '⏳ Генерирую посты из тем канала... Это займет 30-60 секунд'
+      '⏳ Генерирую посты из тем канала...',{
+        reply_markup:{
+          inline_keyboard: [[
+            {
+              text:'❌ Отменить',
+              callback_data: `cancel:${commandId}`
+            }
+          ]]
+        }
+      }
     );
     statusMessageId = statusMessage.message_id;
+    
 
     const result = await processNataliaChannelPosts();
 

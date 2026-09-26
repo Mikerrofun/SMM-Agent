@@ -1,6 +1,6 @@
 import { Context } from 'grammy';
 import { AsyncLocalStorage } from 'async_hooks';
-import { CommandState } from '../CommandMaganer/CommandMaganer.types'
+import { CommandState } from './CommandManager.types'
 
 const commandContext = new AsyncLocalStorage<string>();
 

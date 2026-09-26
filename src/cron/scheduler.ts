@@ -2,9 +2,10 @@ import cron from "node-cron";
 import { Context } from "grammy";
 import { bot } from "../bot";
 import { handleRunPipelineCommand, logPipelineStats } from "../bot/commands/runPipeline";
-import type { PipelineResult } from "../services/pipeline/pipelineService.types";
+import type { PipelineCommandResult } from "../services/pipeline/pipelineService.types";
 import { formatPipelineReport } from "../shared/utils/pipelineReportFormatter";
 import { getSubscriberChatIds } from "../shared/telegram/subscribers";
+import { CommandCancelledError } from "../shared/utils/CommandManager/CommandManager.errors";
 
 const SUBSCRIBER_CHAT_IDS = getSubscriberChatIds();
 
@@ -16,12 +17,19 @@ const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "50 6 * * 2,4"; // По ум�
 
 
 function createCronContext(chatId: string): Context {
+  // execute читает ctx.from?.id и ctx.chat?.id — без них крон молча не запустит
+  // пайплайн. userId крон-команды = ID админа, commandName = run_pipeline,
+  // поэтому singleton-блокировка и кнопка отмены работают и для крона.
+  const adminId = Number(chatId);
+
   return {
     api: bot.api,
-    reply: async (text: string, options?: any) => {
+    from: { id: adminId },
+    chat: { id: adminId },
+    reply: async (text: string, options?: Parameters<Context["reply"]>[1]) => {
       return await bot.api.sendMessage(chatId, text, options);
     },
-  } as Context;
+  } as unknown as Context;
 }
 
 
@@ -43,7 +51,7 @@ async function runScheduledPipeline(): Promise<void> {
 
   console.log(`[CRON] 👥 Подписчиков: ${SUBSCRIBER_CHAT_IDS.length}`);
 
-  let pipelineResult: { success: boolean; data?: PipelineResult; error?: string } | null = null;
+  let pipelineResult: PipelineCommandResult | null = null;
 
   try {
     const dayOfWeek = new Date().toLocaleDateString("ru-RU", {
@@ -51,8 +59,10 @@ async function runScheduledPipeline(): Promise<void> {
       timeZone: "Europe/Moscow"
     });
 
-    console.log(`[CRON] 📢 Отправляем уведомление о начале ВСЕМ подписчикам...`);
-    for (const chatId of SUBSCRIBER_CHAT_IDS) {
+    console.log(`[CRON] 📢 Отправляем уведомление о начале подписчикам...`);
+    // Админ (первый в списке) получает стартовое сообщение от execute —
+    // со статусом пайплайна и кнопкой отмены, поэтому в рассылке ему дубликат не нужен
+    for (const chatId of SUBSCRIBER_CHAT_IDS.slice(1)) {
       try {
         await bot.api.sendMessage(
           chatId,
@@ -70,6 +80,24 @@ async function runScheduledPipeline(): Promise<void> {
     // Запускаем пайплайн (отчёт будет отправлен через ctx только первому)
     const ctx = createCronContext(ADMIN_CHAT_ID);
     pipelineResult = await handleRunPipelineCommand(ctx);
+
+    // Прогон отменён (админом через кнопку или по таймауту) — не пугаем
+    // подписчиков «критической ошибкой», а шлём нейтральное сообщение
+    if (pipelineResult?.cancelled) {
+      console.log("[CRON] 🚫 Прогон отменён (админом или по таймауту)");
+
+      for (const chatId of SUBSCRIBER_CHAT_IDS.slice(1)) {
+        try {
+          await bot.api.sendMessage(
+            chatId,
+            "🚫 Автоматический прогон пайплайна был отменён."
+          );
+        } catch (error) {
+          console.error(`[CRON] ❌ Ошибка отправки уведомления об отмене в ${chatId}:`, error);
+        }
+      }
+      return;
+    }
 
     // Если пайплайн успешен — отправляем финальный отчёт ВСЕМ ОСТАЛЬНЫМ подписчикам (кроме первого, он уже получил через ctx)
     if (pipelineResult?.success && pipelineResult.data) {
@@ -94,6 +122,23 @@ async function runScheduledPipeline(): Promise<void> {
     }
 
   } catch (error) {
+    // Отмена — не критическая ошибка: логируем и шлём нейтральное сообщение
+    if (error instanceof CommandCancelledError) {
+      console.log("[CRON] 🚫 Прогон отменён (админом или по таймауту)");
+
+      for (const chatId of SUBSCRIBER_CHAT_IDS.slice(1)) {
+        try {
+          await bot.api.sendMessage(
+            chatId,
+            "🚫 Автоматический прогон пайплайна был отменён."
+          );
+        } catch (notifyError) {
+          console.error(`[CRON] ❌ Ошибка отправки уведомления об отмене в ${chatId}:`, notifyError);
+        }
+      }
+      return;
+    }
+
     console.error("\n" + "=".repeat(60));
     console.error("[CRON] ❌ Ошибка выполнения pipeline:", error);
     console.error("=".repeat(60) + "\n");

@@ -22,6 +22,7 @@ import {
   markAsDuplicate,
 } from '../../repositories/transcriptPostRepository';
 import { generateAndCheckEmbedding } from './deduplicationService';
+import { checkCancelled } from '../../shared/utils/CommandManager/CommandManager';
 import {
   generateUniquePost,
   generateAdditionalPostShared,
@@ -109,6 +110,9 @@ export async function processTranscript(
   const usedMainIdeas: string[] = [];
 
   for (let postIndex = 1; postIndex <= POSTS_PER_TRANSCRIPT; postIndex++) {
+    // Отмена до старта генерации следующего поста
+    checkCancelled();
+
     const postToSend = await generateSinglePost(
       { id: transcriptId, text: transcript.text },
       usedMainIdeas,

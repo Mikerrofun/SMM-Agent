@@ -3,6 +3,8 @@ import { createEmbedding } from '../../ai/embeddings';
 import { createIdeaAndMarkProcessed } from '../../repositories/ideaRepository';
 import { withRetry } from '../../shared/utils/retry';
 import { sleep } from '../../shared/utils/sleep';
+import { checkCancelled } from '../../shared/utils/CommandManager/CommandManager';
+import { CommandCancelledError } from '../../shared/utils/CommandManager/CommandManager.errors';
 import { IDEA_RETRY_CONFIG, IDEA_RATE_LIMIT } from './idea.config';
 import {
   IdeaExtractionError,
@@ -48,8 +50,11 @@ export async function processIdeaBatch(
 
   async function processItem(item: IdeaProcessItem): Promise<void> {
     let stage: IdeaProcessStage = 'extractIdea';
-    
+
     try {
+      // Отмена до LLM-вызова
+      checkCancelled();
+
       // ЭТАП 1: Генерация идеи через LLM
       stage = 'extractIdea';
       const idea = await withRetry(
@@ -83,6 +88,8 @@ export async function processIdeaBatch(
       );
 
       // ЭТАП 3: Сохранение в БД
+      // checkCancelled строго до записи — после старта записи отмены нет
+      checkCancelled();
       stage = 'save';
       try {
         await createIdeaAndMarkProcessed({
@@ -99,6 +106,11 @@ export async function processIdeaBatch(
 
       stats.succeeded++;
     } catch (error) {
+      // Отмена не считается ошибкой элемента — прокидываем вверх
+      if (error instanceof CommandCancelledError) {
+        throw error;
+      }
+
       stats.failed++;
       const errorMessage = formatIdeaProcessError(error, stage, item.id);
       console.error(`❌ Failed to process post ${item.id}: ${errorMessage}`);

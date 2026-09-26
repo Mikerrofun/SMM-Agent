@@ -7,18 +7,12 @@ import { Context } from 'grammy';
 import { processNataliaChannelPosts } from '../../../services/nataliaChannelPost';
 import { finishAndShowButton } from './renderer';
 import type { StatusMessageId } from '../../../shared/types/nataliaChannelPost.types';
-import { ActiveCommand } from '../../../shared/utils/activeCommandSignal'; 
-/**
- * Map для защиты от повторного запуска, пока идёт генерация.
- */
 const runningForUser = new Map<number, boolean>();
 
 export async function handleNataliaChannelPostCommand(
   ctx: Context
 ): Promise<void> {
   const userId = ctx.from?.id;
-  const commandManager = new ActiveCommand();
-  const commandId = commandManager.initCommand(ctx)
 
   if (!userId) {
     return;
@@ -35,16 +29,7 @@ export async function handleNataliaChannelPostCommand(
 
   try {
     const statusMessage = await ctx.reply(
-      '⏳ Генерирую посты из тем канала...',{
-        reply_markup:{
-          inline_keyboard: [[
-            {
-              text:'❌ Отменить',
-              callback_data: `cancel:${commandId}`
-            }
-          ]]
-        }
-      }
+      '⏳ Генерирую посты из тем канала...'
     );
     statusMessageId = statusMessage.message_id;
     
@@ -69,7 +54,7 @@ export async function handleNataliaChannelPostCommand(
       );
       return;
     }
-
+    
     await finishAndShowButton(ctx, result.posts);
   } catch (error) {
     console.error('[NataliaChannelPost] Processing failed', {

@@ -20,6 +20,7 @@ import {
   getRevealedMainIdeas,
 } from '../../repositories/nataliaChannelPostRepository';
 import { generateAndCheckEmbedding } from '../transcript/deduplicationService';
+import { checkCancelled } from '../../shared/utils/CommandManager/CommandManager';
 import { buildNataliaChannelContext } from '../shared/postGeneration/nataliaChannelContext';
 import {
   generateUniquePost,
@@ -84,6 +85,9 @@ export async function processNataliaChannelPosts(): Promise<NataliaChannelProces
   const usedMainIdeas: string[] = [];
 
   for (let postIndex = 1; postIndex <= POSTS_PER_RUN; postIndex++) {
+    // Отмена до старта генерации следующего поста
+    checkCancelled();
+
     const postToSend = await generateUniquePost(
       buildDeps(),
       usedMainIdeas,

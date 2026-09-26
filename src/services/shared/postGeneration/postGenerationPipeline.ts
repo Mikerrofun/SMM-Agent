@@ -11,6 +11,8 @@
  */
 
 import { withRetry } from '../../../shared/utils/retry';
+import { checkCancelled } from '../../../shared/utils/CommandManager/CommandManager';
+import { CommandCancelledError } from '../../../shared/utils/CommandManager/CommandManager.errors';
 import { NATALIA_RELEVANCE_REASON } from '../relevanceFilter';
 import type {
   AdditionalPostDeps,
@@ -37,15 +39,24 @@ export async function generateUniquePost<
     stats.totalAttempts++;
 
     try {
+      // Отмена до LLM-генерации (проверки внутри withRetry не ставим —
+      // отмена не должна ретраиться)
+      checkCancelled();
+
       const postText = await withRetry(
         () => deps.generateText(usedMainIdeas),
         config.retryConfig
       );
 
+      checkCancelled();
+
       const mainIdea = await withRetry(
         () => deps.extractMainIdea(postText),
         config.retryConfig
       );
+
+      // checkCancelled строго до записи — после старта записи отмены нет
+      checkCancelled();
 
       const post = await repository.create(
         deps.createInput({ text: postText, mainIdea, attemptNumber: attempt })
@@ -70,6 +81,8 @@ export async function generateUniquePost<
 
       if (!dedupResult.isDuplicate && !dedupResult.relevanceRejected) {
         // Уникальный пост: проставляем статус SENT
+        // (точка невозврата — до неё отменяться можно)
+        checkCancelled();
         await repository.updateStatus(post.id, 'SENT');
 
         const sentPost = {
@@ -108,6 +121,11 @@ export async function generateUniquePost<
       usedMainIdeas.push(mainIdea);
 
     } catch (error) {
+      // Отмена не считается неудачной попыткой — прокидываем вверх
+      if (error instanceof CommandCancelledError) {
+        throw error;
+      }
+
       const message = error instanceof Error ? error.message : String(error);
       errors.push(`post ${postIndex}, attempt ${attempt}: ${message}`);
       console.error(`${logPrefix} Attempt failed`, {

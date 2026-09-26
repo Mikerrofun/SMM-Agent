@@ -144,6 +144,7 @@ enum RunStatus {
   RUNNING
   SUCCESS
   FAILED
+  CANCELLED
 }
 
 enum TranscriptPostStatus {

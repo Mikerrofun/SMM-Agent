@@ -8,6 +8,8 @@ import { findSimilarNataliaPosts } from '../../repositories/nataliaPostRepositor
 import { findSimilarNataliaChannelPosts } from '../../repositories/nataliaChannelPostRepository';
 import { findSimilarTranscriptPostsForIdeaDedup } from '../../repositories/transcriptPostRepository';
 import { withRetry } from '../../shared/utils/retry';
+import { checkCancelled } from '../../shared/utils/CommandManager/CommandManager';
+import { CommandCancelledError } from '../../shared/utils/CommandManager/CommandManager.errors';
 import { DEDUPLICATION_RETRY_CONFIG } from '../shared/deduplication.config';
 import { resolveBestMatch } from '../shared/similarityResolver';
 import { isNataliaRelevanceRejected, NATALIA_RELEVANCE_REASON } from '../shared/relevanceFilter';
@@ -39,6 +41,10 @@ export async function deduplicateIdeas(
 
   for (let i = 0; i < ideas.length; i++) {
     const idea = ideas[i];
+
+    // Отмена до векторного поиска (проверки внутри withRetry не ставим —
+    // отмена не должна ретраиться)
+    checkCancelled();
 
     try {
       const embeddingArray = parseEmbeddingString(idea.embedding);
@@ -97,6 +103,11 @@ export async function deduplicateIdeas(
       }, DEDUPLICATION_RETRY_CONFIG);
 
     } catch (error) {
+      // Отмена не считается ошибкой элемента — прокидываем вверх
+      if (error instanceof CommandCancelledError) {
+        throw error;
+      }
+
       stats.failed++;
       const message = error instanceof Error ? error.message : String(error);
       

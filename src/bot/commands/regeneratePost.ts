@@ -11,6 +11,8 @@ import type {
 } from '../../services/post/postRegenerationService.types';
 import { validateFeedback } from '../../shared/utils/feedbackValidator';
 import { validateCallbackData } from '../../shared/utils/callbackDataValidator';
+import { commandManager } from '../../shared/utils/CommandManager/CommandManager';
+import { CommandCancelledError } from '../../shared/utils/CommandManager/CommandManager.errors';
 
 export const waitingForFeedback = new Map<number, WaitingForFeedbackState>();
 
@@ -38,96 +40,109 @@ function getCallbackPrefix(postType: PostType): string {
 }
 
 export async function handleRegeneratePostCallback(ctx: Context): Promise<void> {
-  try {
-    const callbackData = ctx.callbackQuery?.data;
-    if (!callbackData) {
-      await ctx.answerCallbackQuery({ text: '❌ Неверные данные' });
-      return;
-    }
-
-    const matched = REGENERATE_PREFIXES.find((entry) =>
-      callbackData.startsWith(entry.prefix)
-    );
-
-    if (!matched) {
-      await ctx.answerCallbackQuery({ text: '❌ Неверные данные' });
-      return;
-    }
-
-    const postType: PostType = matched.postType;
-    const postId = callbackData.replace(matched.prefix, '');
-
-    if (!postId) {
-      await ctx.answerCallbackQuery({ text: '❌ Неверный ID поста' });
-      console.error('[Regenerate] Post ID is missing:', { callbackData, postType });
-      return;
-    }
-
-    await ctx.answerCallbackQuery({ text: '⏳ Генерирую...' });
-
-    const statusMessage = await ctx.reply('⏳ Генерирую новый пост...');
-
-    const result = postType === 'generated'
-      ? await regenerateGeneratedPost(postId)
-      : postType === 'transcript'
-        ? await regenerateTranscriptPost(postId)
-        : await regenerateNataliaChannelPost(postId);
-
-    try {
-      await ctx.api.deleteMessage(ctx.chat!.id, statusMessage.message_id);
-    } catch (deleteError) {
-      console.error('[Regenerate] Failed to delete status message:', deleteError);
-    }
-
-    if (!result.success) {
-      await ctx.reply(
-        `❌ <b>Не удалось перегенерировать пост</b>\n\n` +
-          `Ошибка: ${result.error}`,
-        { parse_mode: 'HTML' }
-      );
-      return;
-    }
-
-    const callbackPrefix = getCallbackPrefix(postType);
-    const regenerateCallback = `${callbackPrefix}:${postId}`;
-    const feedbackCallback = `${callbackPrefix}_feedback:${postId}`;
-
-    // Валидируем callback_data перед созданием клавиатуры
-    validateCallbackData(regenerateCallback, '🔄 Перегенерировать', '[Regenerate]');
-    validateCallbackData(feedbackCallback, '✏️ С уточнением', '[Regenerate]');
-
-    const keyboard = new InlineKeyboard()
-      .text('🔄 Перегенерировать', regenerateCallback)
-      .text('✏️ С уточнением', feedbackCallback);
-
-    await ctx.reply(`✅ <b>Новый вариант поста:</b>\n\n${result.postText}`, {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    });
-
-    if (ctx.msg) {
-    try {
-      await ctx.api.deleteMessage(ctx.msg.chat.id, ctx.msg.message_id);
-    } catch (deleteError) {
-      console.error('[Regenerate] Failed to delete old message:', deleteError);
-    }
-    }
-
-    console.log(`[Regenerate] Successfully regenerated ${postType} post ${postId}`);
-  } catch (error) {
-    console.error('[Regenerate] Error in post regeneration:', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
-
-    try {
-      await ctx.reply(
-        `❌ <b>Произошла ошибка при перегенерации</b>\n\n${errorMessage}`,
-        { parse_mode: 'HTML' }
-      );
-    } catch (replyError) {
-      console.error('[Regenerate] Failed to send error message:', replyError);
-    }
+  const callbackData = ctx.callbackQuery?.data;
+  if (!callbackData) {
+    await ctx.answerCallbackQuery({ text: '❌ Неверные данные' });
+    return;
   }
+
+  const matched = REGENERATE_PREFIXES.find((entry) =>
+    callbackData.startsWith(entry.prefix)
+  );
+
+  if (!matched) {
+    await ctx.answerCallbackQuery({ text: '❌ Неверные данные' });
+    return;
+  }
+
+  const postType: PostType = matched.postType;
+  const postId = callbackData.replace(matched.prefix, '');
+
+  if (!postId) {
+    await ctx.answerCallbackQuery({ text: '❌ Неверный ID поста' });
+    console.error('[Regenerate] Post ID is missing:', { callbackData, postType });
+    return;
+  }
+
+  await ctx.answerCallbackQuery({ text: '⏳ Генерирую...' });
+
+  await commandManager.execute(
+    ctx,
+    'regenerate_post',
+    {
+      // Статус-сообщение с кнопкой отмены отправляет execute
+      statusText: '⏳ Генерирую новый пост...',
+    },
+    async (_ctx, { statusMessage }) => {
+      try {
+        const result = postType === 'generated'
+          ? await regenerateGeneratedPost(postId)
+          : postType === 'transcript'
+            ? await regenerateTranscriptPost(postId)
+            : await regenerateNataliaChannelPost(postId);
+
+        try {
+          await ctx.api.deleteMessage(ctx.chat!.id, statusMessage.message_id);
+        } catch (deleteError) {
+          console.error('[Regenerate] Failed to delete status message:', deleteError);
+        }
+
+        if (!result.success) {
+          await ctx.reply(
+            `❌ <b>Не удалось перегенерировать пост</b>\n\n` +
+              `Ошибка: ${result.error}`,
+            { parse_mode: 'HTML' }
+          );
+          return;
+        }
+
+        const callbackPrefix = getCallbackPrefix(postType);
+        const regenerateCallback = `${callbackPrefix}:${postId}`;
+        const feedbackCallback = `${callbackPrefix}_feedback:${postId}`;
+
+        // Валидируем callback_data перед созданием клавиатуры
+        validateCallbackData(regenerateCallback, '🔄 Перегенерировать', '[Regenerate]');
+        validateCallbackData(feedbackCallback, '✏️ С уточнением', '[Regenerate]');
+
+        const keyboard = new InlineKeyboard()
+          .text('🔄 Перегенерировать', regenerateCallback)
+          .text('✏️ С уточнением', feedbackCallback);
+
+        await ctx.reply(`✅ <b>Новый вариант поста:</b>\n\n${result.postText}`, {
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
+
+        if (ctx.msg) {
+          try {
+            await ctx.api.deleteMessage(ctx.msg.chat.id, ctx.msg.message_id);
+          } catch (deleteError) {
+            console.error('[Regenerate] Failed to delete old message:', deleteError);
+          }
+        }
+
+        console.log(`[Regenerate] Successfully regenerated ${postType} post ${postId}`);
+      } catch (error) {
+        // Отмену обрабатывает execute — прокидываем дальше
+        if (error instanceof CommandCancelledError) {
+          throw error;
+        }
+
+        console.error('[Regenerate] Error in post regeneration:', error);
+
+        const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+
+        try {
+          await ctx.reply(
+            `❌ <b>Произошла ошибка при перегенерации</b>\n\n${errorMessage}`,
+            { parse_mode: 'HTML' }
+          );
+        } catch (replyError) {
+          console.error('[Regenerate] Failed to send error message:', replyError);
+        }
+      }
+    }
+  );
 }
 
 export async function handleRegeneratePostFeedbackCallback(ctx: Context): Promise<void> {

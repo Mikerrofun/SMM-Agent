@@ -15,6 +15,7 @@ import {
   handleRegeneratePostCallback,
   handleRegeneratePostFeedbackCallback,
   handleFeedbackMessage,
+  handleCancelCallback,
 } from "./commands";
 
 if (typeof window === "undefined") {
@@ -78,6 +79,7 @@ bot.callbackQuery(/^regenerate_(idea|transcript)_post_feedback:|^regen_natalia_p
 bot.callbackQuery("run_pipeline", handleRunPipelineCallback);
 bot.callbackQuery(/^transcript_more:/, handleTranscriptMoreCallback);
 bot.callbackQuery(/^natalia_channel_more:/, handleNataliaChannelMoreCallback);
+bot.callbackQuery(/^cancel:/, handleCancelCallback);
 
 // ВАЖНО: handler для фидбека должен быть последним, чтобы не перехватывать команды
 bot.on("message:text", handleFeedbackMessage);

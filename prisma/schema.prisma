@@ -102,19 +102,21 @@ model TranscriptPost {
 }
 
 model NataliaChannelPost {
-  id              String                 @id @default(cuid())
-  text            String
-  mainIdea        String
-  embedding       Unsupported("vector")?
-  similarity      Float?
-  duplicateOfType String?
-  duplicateOfId   String?
-  attemptNumber   Int                    @default(1)
-  createdAt       DateTime               @default(now())
-  status          TranscriptPostStatus   @default(REJECTED)
+  id                 String                 @id @default(cuid())
+  text               String
+  mainIdea           String
+  embedding          Unsupported("vector")?
+  similarity         Float?
+  duplicateOfType    String?
+  duplicateOfId      String?
+  attemptNumber      Int                    @default(1)
+  createdAt          DateTime               @default(now())
+  status             TranscriptPostStatus   @default(REJECTED)
+  generationBatchId  String?                // UUID генерации для точного отката при отмене
 
   @@index([status])
   @@index([duplicateOfId])
+  @@index([generationBatchId])
 }
 
 model GenerationRun {

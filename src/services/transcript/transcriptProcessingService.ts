@@ -20,9 +20,11 @@ import {
   updateStatus,
   getRevealedMainIdeas,
   markAsDuplicate,
+  revertSentPostsToDraft,
 } from '../../repositories/transcriptPostRepository';
 import { generateAndCheckEmbedding } from './deduplicationService';
 import { checkCancelled } from '../../shared/utils/CommandManager/CommandManager';
+import { CommandCancelledError } from '../../shared/utils/CommandManager/CommandManager.errors';
 import {
   generateUniquePost,
   generateAdditionalPostShared,
@@ -43,7 +45,6 @@ import type {
   ProcessingStats,
 } from './transcriptProcessingService.types';
 import type { CreateTranscriptPostInput } from '../../shared/types/transcript.types';
-
 
 function buildDeps(
   transcript: { id: string; text: string }
@@ -109,58 +110,75 @@ export async function processTranscript(
   const postsToSend: TranscriptPostData[] = [];
   const usedMainIdeas: string[] = [];
 
-  for (let postIndex = 1; postIndex <= POSTS_PER_TRANSCRIPT; postIndex++) {
-    // Отмена до старта генерации следующего поста
-    checkCancelled();
+  try {
+    for (let postIndex = 1; postIndex <= POSTS_PER_TRANSCRIPT; postIndex++) {
+      // Отмена до старта генерации следующего поста
+      checkCancelled();
 
-    const postToSend = await generateSinglePost(
-      { id: transcriptId, text: transcript.text },
-      usedMainIdeas,
-      postIndex,
-      stats,
-      errors
-    );
-
-    if (postToSend === null) {
-      console.error('[TranscriptProcessing] Post generation failed', {
-        transcriptId,
+      const postToSend = await generateSinglePost(
+        { id: transcriptId, text: transcript.text },
+        usedMainIdeas,
         postIndex,
-        message: 'All attempts resulted in duplicates or errors',
+        stats,
+        errors
+      );
+
+      if (postToSend === null) {
+        console.error('[TranscriptProcessing] Post generation failed', {
+          transcriptId,
+          postIndex,
+          message: 'All attempts resulted in duplicates or errors',
+        });
+        continue;
+      }
+
+      postsToSend.push(postToSend);
+      usedMainIdeas.push(postToSend.mainIdea);
+
+      console.log('[TranscriptProcessing] Post generated', {
+        postIndex,
+        postId: postToSend.id,
+        isDuplicate: false,
+        similarity: postToSend.similarity,
+        finalAttempt: postToSend.attemptNumber,
       });
-      continue;
     }
 
-    postsToSend.push(postToSend);
-    usedMainIdeas.push(postToSend.mainIdea);
+    if (postsToSend.length > 0) {
+      await markAsProcessed(transcriptId, new Date());
+    }
 
-    console.log('[TranscriptProcessing] Post generated', {
-      postIndex,
-      postId: postToSend.id,
-      isDuplicate: false,
-      similarity: postToSend.similarity,
-      finalAttempt: postToSend.attemptNumber,
+    console.log('[TranscriptProcessing] Completed', {
+      transcriptId,
+      uniquePosts: stats.uniquePosts,
+      duplicatePosts: stats.duplicatePosts,
+      failedPosts: stats.failedPosts,
+      totalAttempts: stats.totalAttempts,
     });
+
+    return {
+      transcriptId,
+      requestedPosts: POSTS_PER_TRANSCRIPT,
+      posts: postsToSend,
+      stats,
+      errors,
+    };
+  } catch (error) {
+    if (error instanceof CommandCancelledError) {
+      // Откатываем все SENT посты этой транскрипции обратно в REJECTED
+      const reverted = await revertSentPostsToDraft(transcriptId);
+      
+      console.log('[TranscriptProcessing] Cancelled, reverted SENT posts to REJECTED', {
+        transcriptId,
+        revertedCount: reverted,
+      });
+      
+      throw error;
+    }
+    
+    // Обычная ошибка — прокидываем как есть
+    throw error;
   }
-
-  if (postsToSend.length > 0) {
-    await markAsProcessed(transcriptId, new Date());
-  }
-
-  console.log('[TranscriptProcessing] Completed', {
-    transcriptId,
-    uniquePosts: stats.uniquePosts,
-    duplicatePosts: stats.duplicatePosts,
-    failedPosts: stats.failedPosts,
-    totalAttempts: stats.totalAttempts,
-  });
-
-  return {
-    transcriptId,
-    requestedPosts: POSTS_PER_TRANSCRIPT,
-    posts: postsToSend,
-    stats,
-    errors,
-  };
 }
 
 

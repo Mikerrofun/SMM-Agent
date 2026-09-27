@@ -21,6 +21,7 @@ export interface CreateNataliaChannelPostInput {
   text: string;
   mainIdea: string;
   attemptNumber: number;
+  generationBatchId?: string;
 }
 
 /**

@@ -92,8 +92,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
     "run_pipeline",
     {
       statusText: "🚀 Запуск пайплайна генерации идей...",
-      // Глобальный запрет параллельного пайплайна (включая крон) —
-      // заменяет прежний флаг isPipelineRunning
+      // Глобальный запрет параллельного пайплайна (включая крон)
       singleton: true,
     },
     async (_ctx, { statusMessage }) => {
@@ -101,7 +100,6 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
       let lastStatusEditAt = 0;
 
       const pipelinePromise = runFullPipeline(async (_stage, status) => {
-        // После отмены отложенный edit не должен перезаписать «Команда отменена»
         if (commandManager.isCurrentCancelled()) return;
 
         // Троттлинг: редактируем не чаще раза в STATUS_EDIT_INTERVAL_MS,

@@ -365,6 +365,541 @@ const timeoutHandle = setTimeout(() => {
 - Миграция `CANCELLED` создана, но не применена — до накатки `updateGenerationRunCancelled` упадёт на проде.
 - `cleanupStaleCommands` (раз в 30 мин, записи старше часа) чистит только учёт — сами «зависшие» хендлеры он остановить не может.
 
+## 9. API `commandManager.execute`
+
+### Сигнатура
+
+```typescript
+async execute<T>(
+  ctx: Context,                    // Grammy контекст (from/chat обязательны)
+  commandName: CommandName,        // Имя команды из списка COMMAND_NAMES
+  options: ExecuteOptions,         // Конфигурация: текст статуса, successText, singleton
+  handler: CommandHandler<T>       // Асинхронная функция-хендлер команды
+): Promise<CommandExecuteResult<T> | null>
+```
+
+### Параметры
+
+#### `ctx: Context`
+Telegram-контекст Grammy. Обязательно содержит:
+- `ctx.from.id` — ID пользователя (для per-user блокировки)
+- `ctx.chat.id` — ID чата (для отправки статус-сообщения)
+
+Если отсутствуют — возвращает `null`.
+
+#### `commandName: CommandName`
+Одно из зарегистрированных имён команд:
+```typescript
+'run_pipeline' | 'natalia_channel_post' | 'transcript_post_pdf' | 
+'generate_post' | 'regenerate_post'
+```
+
+Используется для:
+- Составления `commandId` (`${userId}_${commandName}`)
+- Per-user блокировки (один и тот же пользователь не может запустить команду дважды)
+- Singleton блокировки (одновременно только один прогон команды глобально)
+
+#### `options: ExecuteOptions`
+```typescript
+{
+  statusText: string;        // Текст стартового статус-сообщения с кнопкой отмены
+  successText?: string;      // Текст при успехе (опционально, редактирует статус-сообщение)
+  singleton?: boolean;       // Глобальная блокировка (независимо от userId)
+}
+```
+
+**Примеры:**
+```typescript
+// Обычная команда
+{ statusText: '⏳ Генерирую посты...' }
+
+// С финальным текстом
+{ 
+  statusText: '⏳ Генерирую посты...', 
+  successText: '✅ Посты созданы!' 
+}
+
+// Глобальная блокировка (пайплайн)
+{ 
+  statusText: '🚀 Запуск пайплайна...', 
+  singleton: true 
+}
+```
+
+#### `handler: CommandHandler<T>`
+Асинхронная функция, которая выполняет основную логику команды.
+
+```typescript
+type CommandHandler<T> = (
+  ctx: Context,
+  context: { statusMessage: CommandStatusMessage }
+) => Promise<T>
+```
+
+**Параметры хендлера:**
+- `ctx` — тот же Grammy контекст
+- `context.statusMessage` — отправленное статус-сообщение (для редактирования)
+
+**Возврат:**
+- `Promise<T>` — результат команды (любой тип)
+
+**Пример:**
+```typescript
+async (ctx, { statusMessage }) => {
+  const result = await processNataliaChannelPosts();
+  
+  // Удаляем статус-сообщение
+  await ctx.api.deleteMessage(ctx.chat.id, statusMessage.message_id);
+  
+  // Показываем результат
+  await finishAndShowButton(ctx, result.posts);
+  
+  return result; // возвращаем для execute
+}
+```
+
+### Возвращаемое значение
+
+```typescript
+type CommandExecuteResult<T> =
+  | { status: 'completed'; value: T }      // Успех: возвращает результат хендлера
+  | { status: 'cancelled' }                // Отменено кнопкой/таймаутом
+  | { status: 'already_running' }          // Команда уже выполняется
+  | null                                   // Невозможно запустить (нет from/chat)
+```
+
+**Обработка результата:**
+```typescript
+const execution = await commandManager.execute(...);
+
+switch (execution?.status) {
+  case 'completed':
+    return execution.value; // результат хендлера
+  case 'cancelled':
+    return { success: false, cancelled: true };
+  case 'already_running':
+    return { success: false, error: 'Already running' };
+  default:
+    return { success: false, error: 'No context' };
+}
+```
+
+### Внутреннее поведение `execute`
+
+1. **Валидация контекста**
+   ```typescript
+   if (!ctx.from?.id || !ctx.chat?.id) return null;
+   ```
+
+2. **Проверка блокировок**
+   ```typescript
+   const commandId = `${userId}_${commandName}`;
+   
+   // Per-user блокировка
+   if (this.activeCommands.has(commandId)) {
+     await ctx.reply('⏳ Эта команда уже выполняется...');
+     return { status: 'already_running' };
+   }
+   
+   // Singleton блокировка
+   if (options.singleton && this.isCommandNameRunning(commandName)) {
+     await ctx.reply('⏳ Эта команда уже выполняется...');
+     return { status: 'already_running' };
+   }
+   ```
+
+3. **Регистрация команды**
+   ```typescript
+   const controller = new AbortController();
+   this.activeCommands.set(commandId, {
+     controller,
+     userId,
+     commandName,
+     startedAt: new Date(),
+     chatId,
+   });
+   ```
+
+4. **Отправка статус-сообщения с кнопкой**
+   ```typescript
+   const statusMessage = await ctx.reply(options.statusText, {
+     reply_markup: buildCancelKeyboard(commandId)
+   });
+   ```
+   
+   Кнопка содержит `callback_data: "cancel:${commandId}"`.
+
+5. **Запуск хендлера в AsyncLocalStorage**
+   ```typescript
+   const result = await this.commandContext.run(commandId, () =>
+     handler(ctx, { statusMessage })
+   );
+   ```
+   
+   `AsyncLocalStorage` позволяет `checkCancelled()` в любом месте кода получить текущий `commandId` и проверить статус отмены.
+
+6. **Обработка результата**
+   - **Успех:** редактирует статус-сообщение на `successText` (если задан)
+   - **Отмена (`CommandCancelledError`):** редактирует в "❌ Команда отменена: [reason]"
+   - **Ошибка:** отправляет "❌ Ошибка: [message]"
+
+7. **Cleanup в `finally`**
+   ```typescript
+   finally {
+     this.activeCommands.delete(commandId); // снятие блокировки
+   }
+   ```
+
+### Пример полного цикла
+
+```typescript
+// 1. Юзер нажимает /natalia_channel_post
+await commandManager.execute(
+  ctx,
+  'natalia_channel_post',
+  { statusText: '⏳ Генерирую посты...' },
+  async (ctx, { statusMessage }) => {
+    // 2. execute уже отправил статус-сообщение с кнопкой
+    
+    // 3. Хендлер выполняет логику
+    const result = await processNataliaChannelPosts();
+    
+    // 4. Внутри processNataliaChannelPosts вызываются checkCancelled()
+    //    Если юзер нажал кнопку → бросается CommandCancelledError
+    
+    // 5. Хендлер завершается успешно
+    await finishAndShowButton(ctx, result.posts);
+    return result;
+  }
+);
+
+// 6. execute возвращает { status: 'completed', value: result }
+// 7. activeCommands.delete(commandId) в finally
+```
+
+## 10. Откат постов при отмене (SENT → REJECTED)
+
+### Проблема
+
+При отмене команды генерации постов между завершёнными постами возникала **брешь в данных**:
+
+```
+POST #1: ✅ DRAFT → SENT (показан в БД как готовый)
+POST #2: ✅ DRAFT → SENT (показан в БД как готовый)
+POST #3: [ОТМЕНА] → остался DRAFT
+         ↓
+finishAndShowButton() НЕ вызывается
+         ↓
+Юзер НЕ видит POST #1 и #2, но они в БД со статусом SENT
+```
+
+**Результат:** несоответствие БД и UI — посты помечены `SENT`, но юзер их не видел.
+
+### Решение
+
+При отмене все `SENT` посты текущей генерации откатываются обратно в `REJECTED`.
+
+#### TranscriptPost (откат по `transcriptId`)
+
+```typescript
+// src/repositories/transcriptPostRepository.ts
+export async function revertSentPostsToDraft(transcriptId: string): Promise<number> {
+  const result = await prisma.transcriptPost.updateMany({
+    where: {
+      transcriptId,
+      status: 'SENT',
+    },
+    data: {
+      status: 'REJECTED',
+    },
+  });
+  
+  return result.count;
+}
+```
+
+**Использование:**
+```typescript
+// src/services/transcript/transcriptProcessingService.ts
+try {
+  for (let postIndex = 1; postIndex <= POSTS_PER_TRANSCRIPT; postIndex++) {
+    checkCancelled();
+    const post = await generateSinglePost(...);
+    // ...
+  }
+} catch (error) {
+  if (error instanceof CommandCancelledError) {
+    // Откатываем все SENT посты этой транскрипции
+    const reverted = await revertSentPostsToDraft(transcriptId);
+    
+    console.log('[TranscriptProcessing] Cancelled, reverted SENT posts to REJECTED', {
+      transcriptId,
+      revertedCount: reverted,
+    });
+    
+    throw error; // прокидываем дальше
+  }
+  throw error;
+}
+```
+
+#### NataliaChannelPost (откат по `generationBatchId`)
+
+**Проблема:** у `NataliaChannelPost` нет `transcriptId` для группировки постов одной генерации.
+
+**Решение:** добавлено поле `generationBatchId` в схему.
+
+```prisma
+// prisma/schema.prisma
+model NataliaChannelPost {
+  id                 String                 @id @default(cuid())
+  text               String
+  mainIdea           String
+  embedding          Unsupported("vector")?
+  similarity         Float?
+  duplicateOfType    String?
+  duplicateOfId      String?
+  attemptNumber      Int                    @default(1)
+  createdAt          DateTime               @default(now())
+  status             TranscriptPostStatus   @default(REJECTED)
+  generationBatchId  String?                // UUID генерации для точного отката
+
+  @@index([status])
+  @@index([duplicateOfId])
+  @@index([generationBatchId])
+}
+```
+
+**Репозиторий:**
+```typescript
+// src/repositories/nataliaChannelPostRepository.ts
+export async function revertBatchPostsToDraft(batchId: string): Promise<number> {
+  const result = await prisma.nataliaChannelPost.updateMany({
+    where: {
+      generationBatchId: batchId,
+      status: 'SENT',
+    },
+    data: {
+      status: 'REJECTED',
+    },
+  });
+  
+  return result.count;
+}
+```
+
+**Использование:**
+```typescript
+// src/services/nataliaChannelPost/nataliaChannelPostService.ts
+export async function processNataliaChannelPosts() {
+  // Генерируем UUID для группировки постов этой генерации
+  const batchId = crypto.randomUUID();
+
+  try {
+    for (let postIndex = 1; postIndex <= POSTS_PER_RUN; postIndex++) {
+      checkCancelled();
+      
+      // Передаём batchId при создании поста
+      const post = await generateUniquePost(
+        buildDeps(batchId), // ← включает batchId в createInput
+        usedMainIdeas,
+        postIndex,
+        stats,
+        errors
+      );
+      // ...
+    }
+  } catch (error) {
+    if (error instanceof CommandCancelledError) {
+      // Откатываем все SENT посты этого batch
+      const reverted = await revertBatchPostsToDraft(batchId);
+      
+      console.log('[NataliaChannelPost] Cancelled, reverted batch SENT posts to REJECTED', {
+        batchId,
+        revertedCount: reverted,
+      });
+      
+      throw error;
+    }
+    throw error;
+  }
+}
+```
+
+### Зачем `generationBatchId`, если есть singleton?
+
+Singleton блокирует **одновременные** запуски, но не гарантирует отсутствие постов прошлых генераций со статусом `SENT` за последние N минут. `generationBatchId` даёт **точную** принадлежность постов к конкретной генерации, независимо от времени.
+
+**Преимущества:**
+- ✅ Откатываются **только** посты текущей отменённой генерации
+- ✅ Не затрагиваются посты из других генераций
+- ✅ Работает корректно даже если singleton будет убран в будущем
+
+### Миграция
+
+Создана миграция `20260927120000_add_generation_batch_id`, но **не применена** (для 3 юзеров текущая реализация достаточна, миграция готова на будущее).
+
+**Применить:**
+```bash
+npx prisma migrate deploy
+```
+
+## 11. Точки проверки отмены (checkCancelled)
+
+Отмена работает через **кооперативные точки проверки** — `checkCancelled()` вызывается **ДО** долгих операций и **СТРОГО ДО** записей в БД (точек невозврата).
+
+### Принципы расстановки
+
+1. **ДО долгих операций** — LLM-вызовы, векторный поиск, парсинг, fetch
+2. **ВНЕ `withRetry`** — отмена не должна ретраиться
+3. **СТРОГО ДО записи в БД** — после записи отмена не имеет смысла
+4. **НЕ в `catch` блоках** — `CommandCancelledError` прокидывается как есть, не обрабатывается
+
+### Карта точек проверки
+
+#### Pipeline (runFullPipeline)
+```typescript
+// src/services/pipeline/pipelineService.ts
+
+checkCancelled(); // перед инициализацией Telegram-клиента
+checkCancelled(); // перед parseCompetitorsChannels
+
+parsingStats = await parseCompetitorsChannels(client, (channelName, current, total) => {
+  checkCancelled(); // перед каждым каналом
+});
+
+checkCancelled(); // перед processIdeaBatch
+checkCancelled(); // перед deduplicateIdeas
+checkCancelled(); // перед updateGenerationRunSuccess
+```
+
+#### Idea Processor (processIdeaBatch)
+```typescript
+// src/services/idea/ideaProcessor.ts
+
+for (const post of items) {
+  checkCancelled(); // перед обработкой каждого поста
+  
+  try {
+    // НЕ внутри withRetry!
+    const ideaData = await withRetry(() => generateIdeaFromPost(post.text));
+    
+    checkCancelled(); // перед записью идеи в БД (точка невозврата)
+    
+    const idea = await createIdea({
+      competitorPostId: post.id,
+      ...ideaData,
+    });
+    
+    stats.succeeded++;
+  } catch (error) {
+    if (error instanceof CommandCancelledError) {
+      throw error; // НЕ считается ошибкой элемента
+    }
+    stats.failed++;
+  }
+}
+```
+
+#### Post Generation Pipeline (generateUniquePost)
+```typescript
+// src/services/shared/postGeneration/postGenerationPipeline.ts
+
+for (let attempt = 1; attempt <= config.maxAttemptsPerPost; attempt++) {
+  try {
+    checkCancelled(); // перед LLM-генерацией текста поста
+    
+    const postText = await withRetry(() => deps.generateText(usedMainIdeas));
+    
+    checkCancelled(); // перед извлечением mainIdea
+    
+    const mainIdea = await withRetry(() => deps.extractMainIdea(postText));
+    
+    checkCancelled(); // СТРОГО ДО записи поста в БД
+    
+    const post = await repository.create(
+      deps.createInput({ text: postText, mainIdea, attemptNumber: attempt })
+    );
+    
+    // Дедупликация (embedding уже записан, но статус ещё REJECTED)
+    const dedupResult = await deps.checkDuplication(mainIdea);
+    
+    await repository.updateEmbedding(post.id, dedupResult.embedding);
+    await repository.updateSimilarity(post.id, dedupResult.maxSimilarity);
+    
+    if (!dedupResult.isDuplicate && !dedupResult.relevanceRejected) {
+      checkCancelled(); // перед финальной точкой невозврата (статус SENT)
+      
+      await repository.updateStatus(post.id, 'SENT');
+      return sentPost;
+    }
+  } catch (error) {
+    if (error instanceof CommandCancelledError) {
+      throw error; // НЕ ретраится, НЕ считается stats.failed
+    }
+    // обычная ошибка
+  }
+}
+```
+
+#### Transcript Processing
+```typescript
+// src/services/transcript/transcriptProcessingService.ts
+
+for (let postIndex = 1; postIndex <= POSTS_PER_TRANSCRIPT; postIndex++) {
+  checkCancelled(); // перед генерацией каждого поста
+  
+  const post = await generateSinglePost(...); // внутри точки из generateUniquePost
+  // ...
+}
+```
+
+#### Natalia Channel Post
+```typescript
+// src/services/nataliaChannelPost/nataliaChannelPostService.ts
+
+for (let postIndex = 1; postIndex <= POSTS_PER_RUN; postIndex++) {
+  checkCancelled(); // перед генерацией каждого поста
+  
+  const post = await generateUniquePost(...); // внутри точки из generateUniquePost
+  // ...
+}
+```
+
+#### Document Handler (PDF)
+```typescript
+// src/bot/commands/transcriptPost/documentHandler.ts
+
+checkCancelled(); // перед долгим скачиванием файла (может занять 5-30 сек)
+
+const response = await fetch(fileUrl);
+const buffer = Buffer.from(await response.arrayBuffer());
+
+checkCancelled(); // перед парсингом PDF (может занять 2-5 сек)
+
+const text = await extractTextFromPdf(buffer);
+
+checkCancelled(); // перед записью транскрипта в БД (точка невозврата)
+
+const transcript = await createTranscript({ text, fileName });
+
+// Дальше processTranscript со своими точками
+const result = await processTranscript(transcript.id);
+```
+
+### Итого точек проверки
+
+| Сервис | Количество точек | Где |
+|--------|------------------|-----|
+| **runFullPipeline** | ~6 | Перед каждым этапом + внутри каждого канала |
+| **ideaProcessor** | 2 × N постов | Перед обработкой + перед записью в БД |
+| **generateUniquePost** | 4 × попыток | Перед LLM × 2, перед create, перед SENT |
+| **transcriptProcessing** | 1 × 3 поста | Перед каждым постом |
+| **nataliaChannelPost** | 1 × 3 поста | Перед каждым постом |
+| **documentHandler** | 3 | Перед fetch, перед PDF parse, перед create |
+
+**Общая защита:** при обычной генерации 3 постов с 5 попытками каждый — до **~60 точек проверки**, что даёт **<1 секунды задержки** между нажатием кнопки и реальной остановкой.
+
 ## Преимущества
 
 - ✅ Любую долгую команду можно отменить одной кнопкой — без ожидания и рестартов.
@@ -373,3 +908,5 @@ const timeoutHandle = setTimeout(() => {
 - ✅ Крон-прогон управляем: админ отменяет его той же кнопкой, подписчики получают нейтральное уведомление вместо «критической ошибки».
 - ✅ Сервисы не зависят от Telegram: `checkCancelled()` вне бота — no-op, отмена не ретраится и не портит статистику.
 - ✅ Per-user и singleton-блокировки заменили разрозненные флаги (`isPipelineRunning`, `runningForUser`) одним механизмом.
+- ✅ **Откат SENT → REJECTED** при отмене гарантирует согласованность БД и UI — юзер не видит посты, которые помечены как отправленные.
+- ✅ **generationBatchId** даёт точный откат постов конкретной генерации без риска затронуть другие.

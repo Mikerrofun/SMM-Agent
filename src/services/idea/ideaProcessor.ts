@@ -52,7 +52,6 @@ export async function processIdeaBatch(
     let stage: IdeaProcessStage = 'extractIdea';
 
     try {
-      // Отмена до LLM-вызова
       checkCancelled();
 
       // ЭТАП 1: Генерация идеи через LLM
@@ -88,7 +87,6 @@ export async function processIdeaBatch(
       );
 
       // ЭТАП 3: Сохранение в БД
-      // checkCancelled строго до записи — после старта записи отмены нет
       checkCancelled();
       stage = 'save';
       try {

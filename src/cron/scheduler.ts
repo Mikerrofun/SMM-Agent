@@ -17,9 +17,6 @@ const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "50 6 * * 2,4"; // По ум�
 
 
 function createCronContext(chatId: string): Context {
-  // execute читает ctx.from?.id и ctx.chat?.id — без них крон молча не запустит
-  // пайплайн. userId крон-команды = ID админа, commandName = run_pipeline,
-  // поэтому singleton-блокировка и кнопка отмены работают и для крона.
   const adminId = Number(chatId);
 
   return {
@@ -122,7 +119,6 @@ async function runScheduledPipeline(): Promise<void> {
     }
 
   } catch (error) {
-    // Отмена — не критическая ошибка: логируем и шлём нейтральное сообщение
     if (error instanceof CommandCancelledError) {
       console.log("[CRON] 🚫 Прогон отменён (админом или по таймауту)");
 

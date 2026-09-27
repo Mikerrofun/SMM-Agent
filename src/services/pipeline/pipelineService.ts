@@ -47,7 +47,6 @@ export async function runFullPipeline(
     parsingStats = await parseCompetitorsChannels(
       client,
       (channelName, current, total) => {
-        // Отмена проверяется по каналу (точка невозврата — запись в БД, не здесь)
         checkCancelled();
 
         void onProgress(
@@ -141,7 +140,6 @@ export async function runFullPipeline(
       `• Дубликатов: ${deduplicationStats.duplicates}`
     );
 
-    // Подсчитываем только уникальные идеи из текущего прогона для записи в GenerationRun
     const acceptedIdeasCount = await countAcceptedIdeasFromRun(generationRun.startedAt);
 
     checkCancelled();

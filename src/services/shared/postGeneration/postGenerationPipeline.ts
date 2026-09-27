@@ -39,8 +39,7 @@ export async function generateUniquePost<
     stats.totalAttempts++;
 
     try {
-      // Отмена до LLM-генерации (проверки внутри withRetry не ставим —
-      // отмена не должна ретраиться)
+
       checkCancelled();
 
       const postText = await withRetry(
@@ -55,7 +54,6 @@ export async function generateUniquePost<
         config.retryConfig
       );
 
-      // checkCancelled строго до записи — после старта записи отмены нет
       checkCancelled();
 
       const post = await repository.create(

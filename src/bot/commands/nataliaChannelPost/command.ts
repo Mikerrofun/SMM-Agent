@@ -17,8 +17,6 @@ export async function handleNataliaChannelPostCommand(
     'natalia_channel_post',
     {
       statusText: '⏳ Генерирую посты из тем канала...',
-      // Команда сама удаляет статус-сообщение перед выводом постов —
-      // execute не должен редактировать удалённое сообщение
     },
     async (_ctx, { statusMessage }) => {
       try {

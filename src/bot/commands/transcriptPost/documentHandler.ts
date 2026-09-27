@@ -47,7 +47,6 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
       'transcript_post_pdf',
       {
         statusText: '⏳ Обрабатываю PDF...',
-        // Команда сама удаляет статус-сообщение перед выводом постов
       },
       async (_ctx, { statusMessage }) => {
         try {
@@ -61,6 +60,9 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
           const token = process.env.TELEGRAM_BOT_TOKEN;
           const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
 
+
+          checkCancelled();
+
           const response = await fetch(fileUrl);
 
           if (!response.ok) {
@@ -69,6 +71,8 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
           }
 
           const buffer = Buffer.from(await response.arrayBuffer());
+
+          checkCancelled();
 
           let text: string;
           try {
@@ -89,8 +93,6 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
             return;
           }
 
-          // createTranscript — запись «сырого материала»: отмена возможна
-          // только до неё, после — до старта генерации постов
           checkCancelled();
 
           const transcript = await createTranscript({
@@ -107,7 +109,7 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
           } catch (editError) {
             console.error('[TranscriptPost] Failed to update status message:', editError);
           }
-
+          
           const result = await processTranscript(transcript.id);
 
           if (ctx.chat) {

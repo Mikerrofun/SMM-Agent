@@ -13,10 +13,7 @@ export interface CommandState {
   chatId: number;
 }
 
-/**
- * Допустимые имена команд для CommandManager.
- * Используются в commandId (`${userId}_${commandName}`) и в сообщении «уже выполняется».
- */
+
 export const COMMAND_NAMES = [
   'run_pipeline',
   'natalia_channel_post',

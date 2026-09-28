@@ -104,6 +104,8 @@ export async function processNataliaChannelPosts(): Promise<NataliaChannelProces
         errors
       );
 
+      checkCancelled();
+
       if (postToSend === null) {
         console.error('[NataliaChannelPost] Post generation failed', {
           postIndex,

@@ -6,7 +6,7 @@
 import { Context } from 'grammy';
 import { processNataliaChannelPosts } from '../../../services/nataliaChannelPost';
 import { finishAndShowButton } from './renderer';
-import { commandManager } from '../../../shared/utils/CommandManager/CommandManager';
+import { commandManager, checkCancelled } from '../../../shared/utils/CommandManager/CommandManager';
 import { CommandCancelledError } from '../../../shared/utils/CommandManager/CommandManager.errors';
 
 export async function handleNataliaChannelPostCommand(
@@ -21,6 +21,8 @@ export async function handleNataliaChannelPostCommand(
     async (_ctx, { statusMessage }) => {
       try {
         const result = await processNataliaChannelPosts();
+
+        checkCancelled();
 
         if (statusMessage && ctx.chat) {
           try {

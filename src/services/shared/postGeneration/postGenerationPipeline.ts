@@ -62,8 +62,12 @@ export async function generateUniquePost<
 
       const dedupResult = await deps.checkDuplication(mainIdea);
 
+      checkCancelled();
+
       await repository.updateEmbedding(post.id, dedupResult.embedding);
       await repository.updateSimilarity(post.id, dedupResult.maxSimilarity);
+
+      checkCancelled();
 
       console.log(`${logPrefix} Attempt`, {
         ...logContext,

@@ -9,10 +9,29 @@
 Финальное решение о выборе идеи и публикации всегда принимает человек — система
 ничего не публикует автоматически.
 
+## Ключевые возможности
+
+### 🎯 Отмена долгих операций
+Все команды с длительными операциями (генерация постов, обработка файлов) обёрнуты в **CommandManager** и поддерживают отмену через кнопку **"❌ Отменить"**:
+- Генерация постов из транскрипции (`/transcript_post`)
+- Генерация постов из канала Натальи (`/natalia_channel_post`)
+- Запуск пайплайна анализа конкурентов (`/run_pipeline`)
+
+При отмене команды:
+- Выполнение прерывается на ближайшей контрольной точке
+- Все изменения откатываются (посты помечаются как `REJECTED`)
+- Статус-сообщение обновляется: "❌ Команда отменена"
+
+### ⚡ Параллельная обработка updates
+Бот использует **Grammy Runner** (`@grammyjs/runner`) для параллельной обработки команд и callback'ов:
+- Кнопка "Отменить" обрабатывается **во время** выполнения команды
+- Несколько пользователей могут работать с ботом одновременно
+- Graceful shutdown при остановке сервера (все операции завершаются корректно)
+
 ## Стек
 
 Next.js (App Router), TypeScript, Prisma + Supabase (PostgreSQL), OpenAI,
-grammy (Telegram-бот), node-cron, zod.
+grammy + @grammyjs/runner (Telegram-бот), node-cron, zod.
 
 ## Быстрый старт
 
@@ -60,6 +79,7 @@ npm run dev
 - [docs/MAIN_IDEA_EXTRACTION.md](docs/MAIN_IDEA_EXTRACTION.md) — извлечение главной мысли (mainIdea) через LLM.
 - [docs/features/TRANSCRIPT_POST_GENERATION.md](docs/features/TRANSCRIPT_POST_GENERATION.md) — генерация постов из транскрипций встреч (`/transcript_post`).
 - [docs/features/LAST_RUN_COMMAND.md](docs/features/LAST_RUN_COMMAND.md) — команда `/last_run` (отчёт по последнему прогону) и фикс потери отчёта из-за Telegram 429.
+- [docs/features/COMMAND_MANAGER.md](docs/features/COMMAND_MANAGER.md) — система управления долгими командами с возможностью отмены.
 
 
 

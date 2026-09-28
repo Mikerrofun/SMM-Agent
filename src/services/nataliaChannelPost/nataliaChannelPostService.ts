@@ -8,6 +8,7 @@
  * при каждом вызове генерации (данные всегда свежие).
  */
 
+import crypto from 'crypto';
 import { extractMainIdea } from '../../ai/mainIdeaExtractor';
 import { generateNataliaChannelPost } from '../../ai/nataliaChannelPostGenerator';
 import { getAllMainIdeas } from '../../repositories/nataliaPostRepository';
@@ -18,8 +19,11 @@ import {
   updateStatus,
   markAsDuplicate,
   getRevealedMainIdeas,
+  revertBatchPostsToDraft,
 } from '../../repositories/nataliaChannelPostRepository';
 import { generateAndCheckEmbedding } from '../transcript/deduplicationService';
+import { checkCancelled } from '../../shared/utils/CommandManager/CommandManager';
+import { CommandCancelledError } from '../../shared/utils/CommandManager/CommandManager.errors';
 import { buildNataliaChannelContext } from '../shared/postGeneration/nataliaChannelContext';
 import {
   generateUniquePost,
@@ -40,7 +44,7 @@ import {
   POSTS_PER_RUN,
 } from './nataliaChannelPost.config';
 
-function buildDeps(): PostGenerationDeps<
+function buildDeps(batchId: string): PostGenerationDeps<
   NataliaChannelPostData,
   CreateNataliaChannelPostInput
 > {
@@ -70,6 +74,7 @@ function buildDeps(): PostGenerationDeps<
       text,
       mainIdea,
       attemptNumber,
+      generationBatchId: batchId,
     }),
     logPrefix: '[NataliaChannelPost]',
   };
@@ -78,54 +83,79 @@ function buildDeps(): PostGenerationDeps<
 export async function processNataliaChannelPosts(): Promise<NataliaChannelProcessingResult> {
   console.log('[NataliaChannelPost] Starting');
 
+  // Генерируем UUID для группировки постов этой генерации
+  const batchId = crypto.randomUUID();
+
   const stats = createPostGenerationStats();
   const errors: string[] = [];
   const postsToSend: NataliaChannelPostData[] = [];
   const usedMainIdeas: string[] = [];
 
-  for (let postIndex = 1; postIndex <= POSTS_PER_RUN; postIndex++) {
-    const postToSend = await generateUniquePost(
-      buildDeps(),
-      usedMainIdeas,
-      postIndex,
-      stats,
-      errors
-    );
+  try {
+    for (let postIndex = 1; postIndex <= POSTS_PER_RUN; postIndex++) {
+      // Отмена до старта генерации следующего поста
+      checkCancelled();
 
-    if (postToSend === null) {
-      console.error('[NataliaChannelPost] Post generation failed', {
+      const postToSend = await generateUniquePost(
+        buildDeps(batchId),
+        usedMainIdeas,
         postIndex,
-        message:
-          'All attempts resulted in duplicates, relevance rejections or errors',
+        stats,
+        errors
+      );
+
+      if (postToSend === null) {
+        console.error('[NataliaChannelPost] Post generation failed', {
+          postIndex,
+          batchId,
+          message:
+            'All attempts resulted in duplicates, relevance rejections or errors',
+        });
+        continue;
+      }
+
+      postsToSend.push(postToSend);
+      usedMainIdeas.push(postToSend.mainIdea);
+
+      console.log('[NataliaChannelPost] Post generated', {
+        postIndex,
+        postId: postToSend.id,
+        batchId,
+        isDuplicate: false,
+        similarity: postToSend.similarity,
+        finalAttempt: postToSend.attemptNumber,
       });
-      continue;
     }
 
-    postsToSend.push(postToSend);
-    usedMainIdeas.push(postToSend.mainIdea);
-
-    console.log('[NataliaChannelPost] Post generated', {
-      postIndex,
-      postId: postToSend.id,
-      isDuplicate: false,
-      similarity: postToSend.similarity,
-      finalAttempt: postToSend.attemptNumber,
+    console.log('[NataliaChannelPost] Completed', {
+      batchId,
+      uniquePosts: stats.uniquePosts,
+      duplicatePosts: stats.duplicatePosts,
+      failedPosts: stats.failedPosts,
+      totalAttempts: stats.totalAttempts,
     });
+
+    return {
+      requestedPosts: POSTS_PER_RUN,
+      posts: postsToSend,
+      stats,
+      errors,
+    };
+  } catch (error) {
+    if (error instanceof CommandCancelledError) {
+      // Откатываем все SENT посты этого batch обратно в REJECTED
+      const reverted = await revertBatchPostsToDraft(batchId);
+      
+      console.log('[NataliaChannelPost] Cancelled, reverted batch SENT posts to REJECTED', {
+        batchId,
+        revertedCount: reverted,
+      });
+      
+      throw error;
+    }
+    
+    throw error;
   }
-
-  console.log('[NataliaChannelPost] Completed', {
-    uniquePosts: stats.uniquePosts,
-    duplicatePosts: stats.duplicatePosts,
-    failedPosts: stats.failedPosts,
-    totalAttempts: stats.totalAttempts,
-  });
-
-  return {
-    requestedPosts: POSTS_PER_RUN,
-    posts: postsToSend,
-    stats,
-    errors,
-  };
 }
 
 export async function generateAdditionalNataliaChannelPost(): Promise<{
@@ -134,10 +164,13 @@ export async function generateAdditionalNataliaChannelPost(): Promise<{
   reason?: 'no_unique_topics' | 'error';
   error?: string;
 }> {
+  // Для дополнительного поста тоже нужен свой batchId
+  const batchId = crypto.randomUUID();
+  
   return generateAdditionalPostShared<NataliaChannelPostData>({
     getUsedMainIdeas: getRevealedMainIdeas,
     generateSingle: (usedMainIdeas, postIndex, stats, errors) =>
-      generateUniquePost(buildDeps(), usedMainIdeas, postIndex, stats, errors),
+      generateUniquePost(buildDeps(batchId), usedMainIdeas, postIndex, stats, errors),
     logPrefix: '[NataliaChannelPost]',
   });
 }

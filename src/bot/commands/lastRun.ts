@@ -1,5 +1,5 @@
 import type { Context } from "grammy";
-import { GenerationRun } from "../../db/generated/client";
+import { GenerationRun, RunStatus } from "../../db/generated/client";
 import { getLatestRun } from "../../repositories/generationRunRepository";
 import { formatDuration } from "../../shared/utils/pipelineReportFormatter";
 import {
@@ -13,6 +13,11 @@ import { STATUS_LABELS, formatMoscowTime } from "../utils/formatters";
  */
 export function formatLastRunReport(run: GenerationRun): string {
   let message = "📊 <b>Последний запуск пайплайна</b>\n\n";
+
+  if (run.status === RunStatus.CANCELLED) {
+    message += "🚫 Последний прогон был отменён.\n\n";
+  }
+
   message += `Статус: ${STATUS_LABELS[run.status]}\n`;
   message += `🕐 Начало: ${formatMoscowTime(run.startedAt)} (МСК)\n`;
 

@@ -7,6 +7,7 @@ export const STATUS_LABELS: Record<RunStatus, string> = {
   [RunStatus.RUNNING]: "⏳ Выполняется",
   [RunStatus.SUCCESS]: "✅ Успешно",
   [RunStatus.FAILED]: "❌ Ошибка",
+  [RunStatus.CANCELLED]: "🚫 Отменён",
 };
 
 /**

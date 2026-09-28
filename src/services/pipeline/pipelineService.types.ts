@@ -21,4 +21,6 @@ export interface PipelineCommandResult {
   success: boolean;
   data?: PipelineResult;
   error?: string;
+  /** Прогон был отменён (кнопка «Отменить» или таймаут) */
+  cancelled?: boolean;
 }

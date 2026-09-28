@@ -201,3 +201,21 @@ export async function updateTranscriptPostText(
     data: { text },
   });
 }
+
+/**
+ * Помечает все SENT посты транскрипции обратно в REJECTED (при отмене команды).
+ * Используется в catch(CommandCancelledError) в processTranscript.
+ */
+export async function revertSentPostsToDraft(transcriptId: string): Promise<number> {
+  const result = await prisma.transcriptPost.updateMany({
+    where: {
+      transcriptId,
+      status: 'SENT',
+    },
+    data: {
+      status: 'REJECTED',
+    },
+  });
+  
+  return result.count;
+}

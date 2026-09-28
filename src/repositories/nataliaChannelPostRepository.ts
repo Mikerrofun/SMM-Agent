@@ -23,6 +23,7 @@ export async function createNataliaChannelPost(
       text: data.text,
       mainIdea: data.mainIdea,
       attemptNumber: data.attemptNumber,
+      generationBatchId: data.generationBatchId,
     },
   });
 }
@@ -158,4 +159,25 @@ export async function updateNataliaChannelPostText(
     where: { id },
     data: { text },
   });
+}
+
+/**
+ * Помечает все SENT посты указанного batch обратно в REJECTED (при отмене команды).
+ * Используется в catch(CommandCancelledError) в processNataliaChannelPosts.
+ * 
+ * Откатывает только посты конкретной генерации по generationBatchId,
+ * без риска затронуть другие параллельные генерации.
+ */
+export async function revertBatchPostsToDraft(batchId: string): Promise<number> {
+  const result = await prisma.nataliaChannelPost.updateMany({
+    where: {
+      generationBatchId: batchId,
+      status: 'SENT',
+    },
+    data: {
+      status: 'REJECTED',
+    },
+  });
+  
+  return result.count;
 }

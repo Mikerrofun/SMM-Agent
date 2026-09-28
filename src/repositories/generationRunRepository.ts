@@ -91,3 +91,33 @@ export async function updateGenerationRunFailed(
     },
   });
 }
+
+/**
+ * Фиксирует отменённый прогон. Частичная статистика сохраняется той,
+ * что уже посчитана — отсутствующие значения не затираются нулями.
+ */
+export async function updateGenerationRunCancelled(
+  runId: string,
+  partialStats?: {
+    processedPosts?: number;
+    generatedIdeas?: number;
+    acceptedIdeas?: number;
+  }
+): Promise<void> {
+  await prisma.generationRun.update({
+    where: { id: runId },
+    data: {
+      finishedAt: new Date(),
+      status: RunStatus.CANCELLED,
+      ...(partialStats?.processedPosts !== undefined && {
+        processedPosts: partialStats.processedPosts,
+      }),
+      ...(partialStats?.generatedIdeas !== undefined && {
+        generatedIdeas: partialStats.generatedIdeas,
+      }),
+      ...(partialStats?.acceptedIdeas !== undefined && {
+        acceptedIdeas: partialStats.acceptedIdeas,
+      }),
+    },
+  });
+}

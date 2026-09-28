@@ -32,9 +32,8 @@ export async function handleCancelCallback(ctx: Context): Promise<void> {
     try {
       await ctx.answerCallbackQuery({ text: 'Отменяю…' });
     } catch (answerError: any) {
-      // Если callback устарел (>30 сек) — это нормально, просто логируем
       if (answerError?.error_code === 400 && answerError?.description?.includes('query is too old')) {
-        console.log('[Cancel] Callback query expired (user clicked after 30s), continuing with cancellation');
+        console.log('[Cancel] Callback query expired, continuing with cancellation');
       } else {
         console.error('[Cancel] Failed to answer callback query:', answerError);
       }

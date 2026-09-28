@@ -1,4 +1,5 @@
 import { Bot } from "grammy";
+import { run } from "@grammyjs/runner";
 import dotenv from "dotenv";
 import { resolve } from "path";
 import {
@@ -97,15 +98,34 @@ bot.catch((error) => {
   }
 });
 
+// Храним runner instance для graceful shutdown
+let botRunner: ReturnType<typeof run> | null = null;
+
 export async function startBot() {
-  console.log("🤖 Starting Telegram bot...");
-  await bot.start();
-  console.log("✅ Telegram bot is running");
+  console.log("🤖 Starting Telegram bot with parallel update processing...");
+  
+  botRunner = run(bot, {
+    runner: {
+      fetch: {
+        allowed_updates: [
+          "message",
+          "callback_query",
+          "edited_message",
+        ],
+      },
+    },
+  });
+  
+  console.log("✅ Telegram bot is running (parallel mode)");
   console.log("📱 Available commands: /start, /help, /ideas, /run_pipeline, /transcript_post, /status");
 }
 
 export async function stopBot() {
   console.log("🛑 Stopping Telegram bot...");
-  await bot.stop();
+  
+  if (botRunner && botRunner.isRunning()) {
+    await botRunner.stop();
+  }
+  
   console.log("✅ Telegram bot stopped");
 }

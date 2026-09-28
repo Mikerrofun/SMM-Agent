@@ -31,6 +31,17 @@ if (!token) {
 
 export const bot = new Bot(token);
 
+// Настраиваем типы updates для получения
+bot.api.config.use((prev, method, payload) => {
+  if (method === 'getUpdates') {
+    return prev(method, {
+      ...payload,
+      allowed_updates: ['message', 'callback_query', 'edited_message'],
+    });
+  }
+  return prev(method, payload);
+});
+
 bot.command("start", async (ctx) => {
   await ctx.reply(
     "👋 Привет! Я SMM Agent — твой персональный AI-ассистент для создания контента.\n\n" +
@@ -104,17 +115,7 @@ let botRunner: ReturnType<typeof run> | null = null;
 export async function startBot() {
   console.log("🤖 Starting Telegram bot with parallel update processing...");
   
-  botRunner = run(bot, {
-    runner: {
-      fetch: {
-        allowed_updates: [
-          "message",
-          "callback_query",
-          "edited_message",
-        ],
-      },
-    },
-  });
+  botRunner = run(bot);
   
   console.log("✅ Telegram bot is running (parallel mode)");
   console.log("📱 Available commands: /start, /help, /ideas, /run_pipeline, /transcript_post, /status");

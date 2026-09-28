@@ -41,10 +41,18 @@ export type ExecuteOptions = {
 
 /**
  * Представление отправленного статус-сообщения (достаточно для editMessageText).
+ * reply_markup содержит инлайн-клавиатуру с кнопкой «Отменить», которую нужно
+ * сохранять при редактировании текста статуса.
  */
 export type CommandStatusMessage = {
   chat: { id: number };
   message_id: number;
+  reply_markup?: {
+    inline_keyboard: Array<Array<{
+      text: string;
+      callback_data: string;
+    }>>;
+  };
 };
 
 /**

@@ -104,7 +104,10 @@ export async function handlePdfDocument(ctx: Context): Promise<void> {
             await ctx.api.editMessageText(
               ctx.chat!.id,
               statusMessage.message_id,
-              '⏳ Генерирую посты... Это займет 30-60 секунд'
+              '⏳ Генерирую посты... Это займет 30-60 секунд',
+              {
+                reply_markup: statusMessage.reply_markup,
+              }
             );
           } catch (editError) {
             console.error('[TranscriptPost] Failed to update status message:', editError);

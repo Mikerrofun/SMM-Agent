@@ -3,8 +3,11 @@ import { Context } from "grammy";
 import { bot } from "../bot";
 import { handleRunPipelineCommand, logPipelineStats } from "../bot/commands/runPipeline";
 import type { PipelineCommandResult } from "../services/pipeline/pipelineService.types";
-import { formatPipelineReport } from "../shared/utils/pipelineReportFormatter";
-import { getSubscriberChatIds } from "../shared/telegram/subscribers";
+import {
+  getSubscriberChatIds,
+  resolveRecipientChatIds,
+  sendMessageToChats,
+} from "../shared/telegram/subscribers";
 import { CommandCancelledError } from "../shared/utils/CommandManager/CommandManager.errors";
 
 const SUBSCRIBER_CHAT_IDS = getSubscriberChatIds();
@@ -59,79 +62,35 @@ async function runScheduledPipeline(): Promise<void> {
     console.log(`[CRON] 📢 Отправляем уведомление о начале подписчикам...`);
     // Админ (первый в списке) получает стартовое сообщение от execute —
     // со статусом пайплайна и кнопкой отмены, поэтому в рассылке ему дубликат не нужен
-    for (const chatId of SUBSCRIBER_CHAT_IDS.slice(1)) {
-      try {
-        await bot.api.sendMessage(
-          chatId,
-          `🤖 Автоматический запуск pipeline\n\n` +
-          `📅 ${dayOfWeek}\n` +
-          `⏰ ${moscowTime}\n\n` +
-          `⏳ Начинаю обработку...`,
-          { parse_mode: "Markdown" }
-        );
-      } catch (error) {
-        console.error(`[CRON] ❌ Ошибка отправки начального уведомления в ${chatId}:`, error);
-      }
+    const startTargets = resolveRecipientChatIds({ excludeChatId: ADMIN_CHAT_ID });
+
+    if (startTargets.length > 0) {
+      await sendMessageToChats(
+        bot.api,
+        startTargets,
+        `🤖 Автоматический запуск pipeline\n\n` +
+        `📅 ${dayOfWeek}\n` +
+        `⏰ ${moscowTime}\n\n` +
+        `⏳ Начинаю обработку...`,
+        { parse_mode: "Markdown" }
+      );
     }
 
-    // Запускаем пайплайн (отчёт будет отправлен через ctx только первому)
+    // Запускаем пайплайн (отчёт будет отправлен через ctx только первому,
+    // остальным подписчикам — рассылкой внутри handleRunPipelineCommand)
     const ctx = createCronContext(ADMIN_CHAT_ID);
     pipelineResult = await handleRunPipelineCommand(ctx);
 
     // Прогон отменён (админом через кнопку или по таймауту) — не пугаем
-    // подписчиков «критической ошибкой», а шлём нейтральное сообщение
+    // подписчиков «критической ошибкой»: уведомление об отмене рассылает runPipeline
     if (pipelineResult?.cancelled) {
       console.log("[CRON] 🚫 Прогон отменён (админом или по таймауту)");
-
-      for (const chatId of SUBSCRIBER_CHAT_IDS.slice(1)) {
-        try {
-          await bot.api.sendMessage(
-            chatId,
-            "🚫 Автоматический прогон пайплайна был отменён."
-          );
-        } catch (error) {
-          console.error(`[CRON] ❌ Ошибка отправки уведомления об отмене в ${chatId}:`, error);
-        }
-      }
       return;
     }
-
-    // Если пайплайн успешен — отправляем финальный отчёт ВСЕМ ОСТАЛЬНЫМ подписчикам (кроме первого, он уже получил через ctx)
-    if (pipelineResult?.success && pipelineResult.data) {
-      const otherSubscribers = SUBSCRIBER_CHAT_IDS.slice(1);
-      
-      if (otherSubscribers.length > 0) {
-        console.log(`\n[CRON] 📢 Отправляем финальный отчёт остальным подписчикам (${otherSubscribers.length})...`);
-        
-        const duration = Math.round((Date.now() - startTime) / 1000);
-        const finalMessage = formatPipelineReport(pipelineResult.data, duration);
-
-        for (const chatId of otherSubscribers) {
-          try {
-            await bot.api.sendMessage(chatId, finalMessage, { parse_mode: "HTML" });
-            console.log(`[CRON] ✅ Финальный отчёт отправлен: ${chatId}`);
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            console.error(`[CRON] ❌ Ошибка отправки финального отчёта в ${chatId}:`, errorMsg);
-          }
-        }
-      }
-    }
-
   } catch (error) {
     if (error instanceof CommandCancelledError) {
       console.log("[CRON] 🚫 Прогон отменён (админом или по таймауту)");
-
-      for (const chatId of SUBSCRIBER_CHAT_IDS.slice(1)) {
-        try {
-          await bot.api.sendMessage(
-            chatId,
-            "🚫 Автоматический прогон пайплайна был отменён."
-          );
-        } catch (notifyError) {
-          console.error(`[CRON] ❌ Ошибка отправки уведомления об отмене в ${chatId}:`, notifyError);
-        }
-      }
+      // Уведомление об отмене остальным подписчикам уже отправлено runPipeline
       return;
     }
 
@@ -139,25 +98,24 @@ async function runScheduledPipeline(): Promise<void> {
     console.error("[CRON] ❌ Ошибка выполнения pipeline:", error);
     console.error("=".repeat(60) + "\n");
 
-    // Отправляем ошибку ВСЕМ подписчикам
+    // Ошибка вне execute (сам execute её не видит) — шлём ВСЕМ подписчикам, включая админа
     try {
       const errorMessage = error instanceof Error ? error.message : "Неизвестная ошибка";
       const shortError = errorMessage.length > 200 
         ? errorMessage.substring(0, 200) + "..." 
         : errorMessage;
 
-      for (const chatId of SUBSCRIBER_CHAT_IDS) {
-        try {
-          await bot.api.sendMessage(
-            chatId,
-            "❌ *Критическая ошибка автоматического запуска*\n\n" +
-            `\`\`\`\n${shortError}\n\`\`\`\n\n` +
-            "Проверьте логи сервера для подробностей.",
-            { parse_mode: "Markdown" }
-          );
-        } catch (notifyError) {
-          console.error(`[CRON] ❌ Не удалось отправить уведомление об ошибке в ${chatId}:`, notifyError);
-        }
+      const errorTargets = resolveRecipientChatIds();
+
+      if (errorTargets.length > 0) {
+        await sendMessageToChats(
+          bot.api,
+          errorTargets,
+          "❌ *Критическая ошибка автоматического запуска*\n\n" +
+          `\`\`\`\n${shortError}\n\`\`\`\n\n` +
+          "Проверьте логи сервера для подробностей.",
+          { parse_mode: "Markdown" }
+        );
       }
     } catch (notifyError) {
       console.error("[CRON] ❌ Критическая ошибка при отправке уведомлений:", notifyError);

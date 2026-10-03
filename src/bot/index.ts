@@ -4,7 +4,9 @@ import dotenv from "dotenv";
 import { resolve } from "path";
 import {
   handleIdeasCommand,
+  handleIdeasSelectionCallback,
   handleGeneratePostCallback,
+  IDEAS_SELECTION_CALLBACK_PREFIX,
   handleRunPipelineCommand,
   handleRunPipelineCallback,
   handleLastRunCommand,
@@ -58,7 +60,7 @@ bot.command("help", async (ctx) => {
     "📋 <b>Доступные команды:</b>\n\n" +
     "/start — начать работу с ботом\n" +
     "/help — показать это сообщение\n" +
-    "/ideas — получить новые идеи для постов\n" +
+    "/ideas — выбрать и получить идеи для постов\n" +
     "/run_pipeline — запустить генерацию идей\n" +
     "/last_run — отчёт по последнему запуску пайплайна\n" +
     "/transcript_post — создать посты из транскрипции встречи\n" +
@@ -66,7 +68,7 @@ bot.command("help", async (ctx) => {
     "/status — статус системы\n\n" +
     "<b>Как это работает?</b>\n\n" +
     "1️⃣ Используй /run_pipeline для запуска анализа каналов конкурентов и генерации идей\n" +
-    "2️⃣ После завершения получи идеи командой /ideas\n" +
+    "2️⃣ После завершения получи идеи командой /ideas — бот спросит, какую порцию прислать\n" +
     "3️⃣ Выбери понравившуюся идею и сгенерируй пост",
     { parse_mode: "HTML" }
   );
@@ -85,6 +87,10 @@ bot.command("status", async (ctx) => {
   await ctx.reply("✅ Бот работает нормально!");
 });
 
+bot.callbackQuery(
+  new RegExp(`^${IDEAS_SELECTION_CALLBACK_PREFIX}`),
+  handleIdeasSelectionCallback
+);
 bot.callbackQuery(/^generate_post:/, handleGeneratePostCallback);
 bot.callbackQuery(/^regenerate_(idea|transcript)_post:|^regen_natalia_post:/, handleRegeneratePostCallback);
 bot.callbackQuery(/^regenerate_(idea|transcript)_post_feedback:|^regen_natalia_post_feedback:/, handleRegeneratePostFeedbackCallback);

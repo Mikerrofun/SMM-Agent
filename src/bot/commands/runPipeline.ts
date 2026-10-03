@@ -11,6 +11,12 @@ import {
   STATUS_EDIT_INTERVAL_MS,
   TELEGRAM_EDIT_RETRY,
 } from "./runPipeline.types";
+import {
+  resolveRecipientChatIds,
+  sendMessageToChats,
+} from "../../shared/telegram/subscribers";
+
+const PIPELINE_CANCELLED_TEXT = "🚫 Прогон пайплайна отменён.";
 
 /**
  * Редактирует существующее сообщение с автоматическими повторными попытками.
@@ -87,6 +93,10 @@ export function logPipelineStats(result: PipelineResult, duration: number): void
 }
 
 export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCommandResult> {
+  // Финальный текст формируется внутри execute, но нужен после — для рассылки подписчикам
+  let finalText: string | null = null;
+  let finalOptions: { parse_mode?: "HTML" } | undefined;
+
   const execution = await commandManager.execute(
     ctx,
     "run_pipeline",
@@ -133,6 +143,8 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
         logPipelineStats(result, duration);
 
         const finalMessage = formatPipelineReport(result, duration);
+        finalText = finalMessage;
+        finalOptions = { parse_mode: "HTML" };
 
         // Финальный отчёт: withRetry + fallback на sendMessage, чтобы он точно пришёл
         await editOrSend(ctx, statusMessage, finalMessage, { parse_mode: "HTML" });
@@ -158,6 +170,9 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
             shortError + "\n\n" +
             "Проверьте логи для подробностей.";
 
+          finalText = errorMsg;
+          finalOptions = undefined;
+
           await editOrSend(ctx, statusMessage, errorMsg);
         } catch (replyError) {
           console.error("Failed to send error message:", replyError);
@@ -177,16 +192,47 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
     }
   );
 
+  let result: PipelineCommandResult;
+
   switch (execution?.status) {
     case "completed":
-      return execution.value;
+      result = execution.value;
+      break;
     case "cancelled":
-      return { success: false, cancelled: true, error: "Pipeline cancelled" };
+      finalText = PIPELINE_CANCELLED_TEXT;
+      finalOptions = undefined;
+      result = { success: false, cancelled: true, error: "Pipeline cancelled" };
+      break;
     case "already_running":
-      return { success: false, error: "Pipeline already running" };
+      result = { success: false, error: "Pipeline already running" };
+      break;
     default:
-      return { success: false, error: "Command context is missing user/chat ids" };
+      result = { success: false, error: "Command context is missing user/chat ids" };
+      break;
   }
+
+  // Тот же текст уходит остальным подписчикам: инициатор уже получил его через ctx
+  if (finalText) {
+    const initiatorChatId = ctx.chat?.id?.toString();
+    const targets = resolveRecipientChatIds({
+      initiatorChatId,
+      excludeChatId: initiatorChatId,
+    });
+
+    if (targets.length > 0) {
+      const { sent, failed } = await sendMessageToChats(
+        ctx.api,
+        targets,
+        finalText,
+        finalOptions
+      );
+      console.log(
+        `[run_pipeline] Отчёт отправлен подписчикам: ${sent} успешно, ${failed} с ошибкой`
+      );
+    }
+  }
+
+  return result;
 }
 
 export async function handleRunPipelineCallback(ctx: Context): Promise<void> {

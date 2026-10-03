@@ -3,8 +3,8 @@ import { GenerationRun, RunStatus } from "../../db/generated/client";
 import { getLatestRun } from "../../repositories/generationRunRepository";
 import { formatDuration } from "../../shared/utils/pipelineReportFormatter";
 import {
-  broadcastToSubscribers,
-  getSubscriberChatIds,
+  resolveRecipientChatIds,
+  sendMessageToChats,
 } from "../../shared/telegram/subscribers";
 import { STATUS_LABELS, formatMoscowTime } from "../utils/formatters";
 
@@ -58,20 +58,23 @@ export async function handleLastRunCommand(ctx: Context): Promise<void> {
     }
 
     const report = formatLastRunReport(run);
-    const subscribers = getSubscriberChatIds();
     const requesterChatId = ctx.chat?.id?.toString();
 
     // Инициатор всегда получает отчёт напрямую в чат, откуда вызвал команду
     await ctx.reply(report, { parse_mode: "HTML" });
 
     // Остальным подписчикам — рассылкой (инициатор исключён, чтобы не было дубля)
-    const targets = subscribers.filter((id) => id !== requesterChatId);
+    const targets = resolveRecipientChatIds({
+      initiatorChatId: requesterChatId,
+      excludeChatId: requesterChatId,
+    });
+
     if (targets.length > 0) {
-      const { sent, failed } = await broadcastToSubscribers(
+      const { sent, failed } = await sendMessageToChats(
         ctx.api,
+        targets,
         report,
-        { parse_mode: "HTML" },
-        targets
+        { parse_mode: "HTML" }
       );
       console.log(
         `[last_run] Отчёт отправлен: ${sent} успешно, ${failed} с ошибкой`

@@ -79,13 +79,7 @@ export async function countUnprocessedCompetitorPosts(): Promise<number> {
   });
 }
 
-/**
- * Получает самые новые идеи для отправки в Telegram.
- * Возвращает идеи со статусом NEW, отсортированные по дате создания (новые первыми).
- *
- * @param limit — максимальное количество идей
- * @returns массив идей со статусом NEW
- */
+
 export async function getNewIdeasForSending(limit: number): Promise<IdeaModel[]> {
   return prisma.idea.findMany({
     where: {
@@ -99,13 +93,7 @@ export async function getNewIdeasForSending(limit: number): Promise<IdeaModel[]>
   });
 }
 
-/**
- * Получает самые старые идеи для отправки в Telegram.
- * Те же условия, что и getNewIdeasForSending, но в обратном порядке.
- *
- * @param limit — максимальное количество идей
- * @returns массив идей со статусом NEW, самые старые первыми
- */
+
 export async function getOldestIdeasForSending(limit: number): Promise<IdeaModel[]> {
   return prisma.idea.findMany({
     where: {

@@ -35,19 +35,13 @@ import {
   takeSelection,
 } from './state';
 
-/**
- * Маппинг режима на функцию репозитория. Живёт в боевом слое:
- * репозиторий не знает про UI выбора категории.
- */
+
 const IDEAS_FETCHERS: Record<IdeasSelectionMode, IdeasFetcher> = {
   new: getNewIdeasForSending,
   fresh: getFreshIdeasForSending,
   old: getOldestIdeasForSending,
 };
 
-/**
- * Шаг 1: команда /ideas — показываем клавиатуру выбора категории.
- */
 export async function handleIdeasCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
 
@@ -55,7 +49,6 @@ export async function handleIdeasCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  // Рассылка ещё идёт — не плодим клавиатуры поверх работающей отправки
   if (isSending(userId)) {
     await ctx.reply(SEND_IN_PROGRESS_TEXT);
     return;
@@ -68,9 +61,7 @@ export async function handleIdeasCommand(ctx: Context): Promise<void> {
   });
 }
 
-/**
- * Шаг 2: нажатие на кнопку выбора категории — отправляем порцию идей.
- */
+
 export async function handleIdeasSelectionCallback(ctx: Context): Promise<void> {
   const mode = parseIdeasSelectionCallbackData(ctx.callbackQuery?.data);
 
@@ -89,14 +80,12 @@ export async function handleIdeasSelectionCallback(ctx: Context): Promise<void> 
 
   await ctx.answerCallbackQuery({ text: SENDING_TOAST_TEXT });
 
-  // Снимаем клавиатуру: повторное нажатие становится невозможным физически
   try {
     await ctx.editMessageReplyMarkup({ reply_markup: undefined });
   } catch (error) {
     console.error('[Ideas] Failed to remove selection keyboard:', error);
   }
 
-  // Состояние забирается синхронно, до любого await — двойной клик не задублирует рассылку
   const selection = takeSelection(userId);
 
   if (!selection) {

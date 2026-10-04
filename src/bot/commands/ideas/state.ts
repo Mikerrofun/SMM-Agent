@@ -20,20 +20,10 @@ function isExpired(state: IdeasSelectionState, now: number): boolean {
   return now - state.createdAt.getTime() > SELECTION_TTL_MS;
 }
 
-/**
- * Сохраняет состояние ожидания выбора категории.
- */
 export function saveSelection(userId: number): void {
   selectionStates.set(userId, { createdAt: new Date() });
 }
 
-/**
- * Синхронно забирает состояние выбора: читает и удаляет запись.
- * Возвращает null, если состояния нет (TTL истёк или его уже забрали).
- *
- * Синхронность важна: удаление происходит до первого await, поэтому два
- * параллельных нажатия не пройдут дальше.
- */
 export function takeSelection(userId: number): IdeasSelectionState | null {
   const state = selectionStates.get(userId);
 
@@ -50,24 +40,14 @@ export function takeSelection(userId: number): IdeasSelectionState | null {
   return state;
 }
 
-/**
- * Снимает состояние выбора (страховка, если флоу упал до забора состояния).
- */
 export function clearSelection(userId: number): void {
   selectionStates.delete(userId);
 }
 
-/**
- * Идёт ли сейчас рассылка у пользователя.
- */
 export function isSending(userId: number): boolean {
   return sendingUserIds.has(userId);
 }
 
-/**
- * Помечает, что рассылка запущена.
- * @returns false, если рассылка уже идёт
- */
 export function startSending(userId: number): boolean {
   if (sendingUserIds.has(userId)) {
     return false;
@@ -77,9 +57,6 @@ export function startSending(userId: number): boolean {
   return true;
 }
 
-/**
- * Снимает флаг «рассылка идёт».
- */
 export function finishSending(userId: number): void {
   sendingUserIds.delete(userId);
 }

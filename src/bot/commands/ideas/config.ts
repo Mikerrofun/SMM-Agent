@@ -1,4 +1,9 @@
-import type { IdeasSelectionMode } from './ideas.types';
+import {
+  getFreshIdeasForSending,
+  getNewIdeasForSending,
+  getOldestIdeasForSending,
+} from '../../../repositories/ideaRepository';
+import type { IdeasFetcher, IdeasSelectionMode } from './ideas.types';
 
 // Сколько идей отправляем за одну выборку
 export const IDEAS_BATCH_SIZE = 10;
@@ -22,6 +27,14 @@ export const SELECTION_BUTTONS: Array<{ mode: IdeasSelectionMode; text: string }
   { mode: 'fresh', text: '🕐 Свежие' },
   { mode: 'old', text: '📜 Старые' },
 ];
+
+// Маппинг режима выбора на функцию репозитория.
+// Репозиторий не знает про UI — режим раскладывается здесь, в боевом слое.
+export const IDEAS_FETCHERS: Record<IdeasSelectionMode, IdeasFetcher> = {
+  new: getNewIdeasForSending,
+  fresh: getFreshIdeasForSending,
+  old: getOldestIdeasForSending,
+};
 
 export const SELECTION_PROMPT_TEXT =
   '🎯 Выбери, какие идеи получить:';

@@ -6,14 +6,9 @@
 
 import type { Context } from 'grammy';
 import {
-  getFreshIdeasForSending,
-  getNewIdeasForSending,
-  getOldestIdeasForSending,
-} from '../../../repositories/ideaRepository';
-import type { IdeasFetcher, IdeasSelectionMode } from './ideas.types';
-import {
-  INVALID_CALLBACK_TEXT,
   IDEAS_BATCH_SIZE,
+  IDEAS_FETCHERS,
+  INVALID_CALLBACK_TEXT,
   NO_IDEAS_TEXT,
   SENDING_TOAST_TEXT,
   SELECTION_EXPIRED_TEXT,
@@ -36,12 +31,6 @@ import {
 } from './state';
 
 
-const IDEAS_FETCHERS: Record<IdeasSelectionMode, IdeasFetcher> = {
-  new: getNewIdeasForSending,
-  fresh: getFreshIdeasForSending,
-  old: getOldestIdeasForSending,
-};
-
 export async function handleIdeasCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
 
@@ -60,6 +49,7 @@ export async function handleIdeasCommand(ctx: Context): Promise<void> {
     reply_markup: buildIdeasSelectionKeyboard(),
   });
 }
+
 
 
 export async function handleIdeasSelectionCallback(ctx: Context): Promise<void> {

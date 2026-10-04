@@ -12,11 +12,13 @@ import {
   TELEGRAM_EDIT_RETRY,
 } from "./runPipeline.types";
 import {
-  resolveRecipientChatIds,
+  getRecipientChatIds,
   sendMessageToChats,
 } from "../../shared/telegram/subscribers";
 
 const PIPELINE_CANCELLED_TEXT = "🚫 Прогон пайплайна отменён.";
+const PIPELINE_DONE_STATUS_TEXT = "✅ Готово, полный отчёт ниже.";
+const PIPELINE_ERROR_STATUS_TEXT = "❌ Пайплайн завершился с ошибкой, подробности ниже.";
 
 /**
  * Редактирует существующее сообщение с автоматическими повторными попытками.
@@ -146,8 +148,9 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
         finalText = finalMessage;
         finalOptions = { parse_mode: "HTML" };
 
-        // Финальный отчёт: withRetry + fallback на sendMessage, чтобы он точно пришёл
-        await editOrSend(ctx, statusMessage, finalMessage, { parse_mode: "HTML" });
+        // Статус-сообщение закрываем коротким текстом: полный отчёт уходит
+        // всем получателям одним циклом рассылки (см. getRecipientChatIds)
+        await editOrSend(ctx, statusMessage, PIPELINE_DONE_STATUS_TEXT);
 
         return { success: true, data: result };
       } catch (error) {
@@ -173,13 +176,15 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
           finalText = errorMsg;
           finalOptions = undefined;
 
-          await editOrSend(ctx, statusMessage, errorMsg);
+          await editOrSend(ctx, statusMessage, PIPELINE_ERROR_STATUS_TEXT);
         } catch (replyError) {
           console.error("Failed to send error message:", replyError);
 
           try {
             const fallbackMsg = "❌ Ошибка выполнения пайплайна. Проверьте логи.";
-            await editOrSend(ctx, statusMessage, fallbackMsg);
+            finalText = finalText ?? fallbackMsg;
+            finalOptions = undefined;
+            await editOrSend(ctx, statusMessage, PIPELINE_ERROR_STATUS_TEXT);
           } catch (fallbackError) {
             console.error("Failed to send fallback message:", fallbackError);
           }
@@ -211,13 +216,9 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
       break;
   }
 
-  // Тот же текст уходит остальным подписчикам: инициатор уже получил его через ctx
+  // Единственный путь доставки результата: подписчики + инициатор
   if (finalText) {
-    const initiatorChatId = ctx.chat?.id?.toString();
-    const targets = resolveRecipientChatIds({
-      initiatorChatId,
-      excludeChatId: initiatorChatId,
-    });
+    const targets = getRecipientChatIds(ctx.chat?.id?.toString());
 
     if (targets.length > 0) {
       const { sent, failed } = await sendMessageToChats(
@@ -227,7 +228,7 @@ export async function handleRunPipelineCommand(ctx: Context): Promise<PipelineCo
         finalOptions
       );
       console.log(
-        `[run_pipeline] Отчёт отправлен подписчикам: ${sent} успешно, ${failed} с ошибкой`
+        `[run_pipeline] Отчёт отправлен: ${sent} успешно, ${failed} с ошибкой`
       );
     }
   }

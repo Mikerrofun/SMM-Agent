@@ -15,9 +15,6 @@ import {
 
 export { IDEAS_SELECTION_CALLBACK_PREFIX, RUN_PIPELINE_CALLBACK };
 
-/**
- * Клавиатура выбора категории идей.
- */
 export function buildIdeasSelectionKeyboard(): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 

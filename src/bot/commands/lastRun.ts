@@ -3,7 +3,7 @@ import { GenerationRun, RunStatus } from "../../db/generated/client";
 import { getLatestRun } from "../../repositories/generationRunRepository";
 import { formatDuration } from "../../shared/utils/pipelineReportFormatter";
 import {
-  resolveRecipientChatIds,
+  getRecipientChatIds,
   sendMessageToChats,
 } from "../../shared/telegram/subscribers";
 import { STATUS_LABELS, formatMoscowTime } from "../utils/formatters";
@@ -58,16 +58,9 @@ export async function handleLastRunCommand(ctx: Context): Promise<void> {
     }
 
     const report = formatLastRunReport(run);
-    const requesterChatId = ctx.chat?.id?.toString();
 
-    // Инициатор всегда получает отчёт напрямую в чат, откуда вызвал команду
-    await ctx.reply(report, { parse_mode: "HTML" });
-
-    // Остальным подписчикам — рассылкой (инициатор исключён, чтобы не было дубля)
-    const targets = resolveRecipientChatIds({
-      initiatorChatId: requesterChatId,
-      excludeChatId: requesterChatId,
-    });
+    // Единственный путь доставки: подписчики + инициатор (одним циклом)
+    const targets = getRecipientChatIds(ctx.chat?.id?.toString());
 
     if (targets.length > 0) {
       const { sent, failed } = await sendMessageToChats(

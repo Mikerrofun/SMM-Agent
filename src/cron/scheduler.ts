@@ -5,7 +5,6 @@ import { handleRunPipelineCommand, logPipelineStats } from "../bot/commands/runP
 import type { PipelineCommandResult } from "../services/pipeline/pipelineService.types";
 import {
   getSubscriberChatIds,
-  resolveRecipientChatIds,
   sendMessageToChats,
 } from "../shared/telegram/subscribers";
 import { CommandCancelledError } from "../shared/utils/CommandManager/CommandManager.errors";
@@ -62,7 +61,7 @@ async function runScheduledPipeline(): Promise<void> {
     console.log(`[CRON] 📢 Отправляем уведомление о начале подписчикам...`);
     // Админ (первый в списке) получает стартовое сообщение от execute —
     // со статусом пайплайна и кнопкой отмены, поэтому в рассылке ему дубликат не нужен
-    const startTargets = resolveRecipientChatIds({ excludeChatId: ADMIN_CHAT_ID });
+    const startTargets = getSubscriberChatIds().filter((id) => id !== ADMIN_CHAT_ID);
 
     if (startTargets.length > 0) {
       await sendMessageToChats(
@@ -105,7 +104,7 @@ async function runScheduledPipeline(): Promise<void> {
         ? errorMessage.substring(0, 200) + "..." 
         : errorMessage;
 
-      const errorTargets = resolveRecipientChatIds();
+      const errorTargets = getSubscriberChatIds();
 
       if (errorTargets.length > 0) {
         await sendMessageToChats(

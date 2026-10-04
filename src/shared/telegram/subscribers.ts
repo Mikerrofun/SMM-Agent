@@ -1,9 +1,5 @@
 import type { Api } from 'grammy';
-import type {
-  BroadcastResult,
-  ResolveRecipientOptions,
-  SendMessageOptions,
-} from './subscribers.types';
+import type { BroadcastResult, SendMessageOptions } from './subscribers.types';
 
 /**
  * Возвращает список chat_id подписчиков из переменной окружения SUBSCRIBER_CHAT_IDS.
@@ -18,27 +14,20 @@ export function getSubscriberChatIds(): string[] {
 }
 
 /**
- * Строит список чатов-получателей рассылки.
+ * Получатели результата: подписчики из SUBSCRIBER_CHAT_IDS + чат инициатора,
+ * если он не подписчик.
  *
- * Инвариант: подписчики + инициатор (если он не подписчик) − чат,
- * которому результат уже ушёл через ctx.
+ * Это единственный путь доставки результата: инициатору тоже.
+ * Проверять «кому уже ушло» не нужно — второй доставки нет.
  *
- * @param options - инициатор и исключаемый чат
+ * @param initiatorChatId - чат инициатора (того, кто нажал кнопку или позвал команду)
  * @returns список chat_id получателей (пустой список — не ошибка)
  */
-export function resolveRecipientChatIds(
-  options: ResolveRecipientOptions = {}
-): string[] {
-  const { initiatorChatId, excludeChatId } = options;
-
+export function getRecipientChatIds(initiatorChatId?: string): string[] {
   const recipients = getSubscriberChatIds();
 
   if (initiatorChatId && !recipients.includes(initiatorChatId)) {
     recipients.push(initiatorChatId);
-  }
-
-  if (excludeChatId) {
-    return recipients.filter((id) => id !== excludeChatId);
   }
 
   return recipients;

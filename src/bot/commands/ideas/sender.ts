@@ -10,7 +10,7 @@ import { InlineKeyboard } from 'grammy';
 import type { IdeaModel } from '../../../db/generated/models/Idea';
 import { markIdeasAsSent } from '../../../repositories/ideaRepository';
 import {
-  resolveRecipientChatIds,
+  getRecipientChatIds,
   sendMessageToChats,
 } from '../../../shared/telegram/subscribers';
 import { sleep } from '../../../shared/utils/sleep';
@@ -31,6 +31,10 @@ function buildGeneratePostKeyboard(ideaId: string): InlineKeyboard {
 /**
  * Рассылает порцию идей и помечает их как SENT.
  *
+ * Единственный путь доставки: подписчики + инициатор (он нажал кнопку выбора).
+ * Через ctx инициатор получил только тост и снятую клавиатуру, сами идеи
+ * до этого момента никуда не уходили.
+ *
  * @param api - Telegram API (ctx.api)
  * @param ideas - порция идей
  * @param initiatorChatId - чат инициатора, которому тоже нужно показать идеи
@@ -41,7 +45,7 @@ export async function sendIdeasBatch(
   ideas: IdeaModel[],
   initiatorChatId: string
 ): Promise<IdeasBatchResult> {
-  const recipients = resolveRecipientChatIds({ initiatorChatId });
+  const recipients = getRecipientChatIds(initiatorChatId);
 
   console.log(
     `[Ideas] 📤 Отправка ${ideas.length} идей для ${recipients.length} получателей`

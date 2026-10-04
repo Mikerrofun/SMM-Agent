@@ -79,21 +79,30 @@ export async function countUnprocessedCompetitorPosts(): Promise<number> {
   });
 }
 
-/**
- * Получает новые идеи для отправки в Telegram.
- * Возвращает идеи со статусом NEW, отсортированные по дате создания.
- *
- * @param limit — максимальное количество идей (по умолчанию 10)
- * @returns массив идей со статусом NEW
- */
-export async function getNewIdeasForSending(limit: number = 10): Promise<IdeaModel[]> {
+
+export async function getNewIdeasForSending(limit: number): Promise<IdeaModel[]> {
   return prisma.idea.findMany({
     where: {
       status: 'NEW',
     },
-    orderBy: {
-      createdAt: 'desc',
+    orderBy: [
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ],
+    take: limit,
+  });
+}
+
+
+export async function getOldestIdeasForSending(limit: number): Promise<IdeaModel[]> {
+  return prisma.idea.findMany({
+    where: {
+      status: 'NEW',
     },
+    orderBy: [
+      { createdAt: 'asc' },
+      { id: 'asc' },
+    ],
     take: limit,
   });
 }
@@ -133,6 +142,45 @@ export async function countIdeasByStatus(
     where: {
       status,
     },
+  });
+}
+
+/**
+ * Получает «свежие» идеи для отправки в Telegram — окно из середины пула NEW.
+ * Если весь пул помещается в limit, отдаётся он целиком (все режимы дают
+ * одинаковый результат). Иначе берётся limit идей, пропустив первые
+ * floor((N - limit) / 2) — так новая порция не пересекается с только что отправленной.
+ *
+ * @param limit — размер порции
+ * @returns массив идей со статусом NEW
+ */
+export async function getFreshIdeasForSending(limit: number): Promise<IdeaModel[]> {
+  const total = await countIdeasByStatus('NEW');
+
+  if (total <= limit) {
+    return prisma.idea.findMany({
+      where: {
+        status: 'NEW',
+      },
+      orderBy: [
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ],
+    });
+  }
+
+  const skip = Math.floor((total - limit) / 2);
+
+  return prisma.idea.findMany({
+    where: {
+      status: 'NEW',
+    },
+    orderBy: [
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ],
+    skip,
+    take: limit,
   });
 }
 
